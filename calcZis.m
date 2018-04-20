@@ -1,4 +1,4 @@
-function [ z ] = calcZis(x, y, A, kappa, eta, ls)
+function [ z ] = calcZis(x, y, A, kernels, kappa, eta, ls, train_idx, ker_num)
     %calcZis Calculates the zi's
     %   Find the current kernel which is a mixture of all ranked kernels
     %   then classifies all y using the current kernel and
@@ -19,13 +19,27 @@ function [ z ] = calcZis(x, y, A, kappa, eta, ls)
     for i=1:length(kappa)
         if iscell(kappa)
             option.kernel = 'cust'; option.kernelfnc=kappa{i};
+            if train_idx == 0
+                curr_kernel = curr_kernel + eta(i)*computeKernelMatrix(A,A,option);
+                partial_kernel = partial_kernel + eta(i)*computeKernelMatrix(y_mat,A,option);
+                single_kernel = single_kernel + eta(i)*computeKernelMatrix(y,y,option);
+            else
+                curr_kernel = curr_kernel + eta(i)*kernels{i};
+                partial_kernel = partial_kernel + eta(i)*kernels{i}(train_idx, :);
+                single_kernel = single_kernel + eta(i)*kernels{i}(train_idx,train_idx);
+            end
         else
             option.kernel = 'cust'; option.kernelfnc=kappa;
+            if train_idx == 0
+                curr_kernel = curr_kernel + eta(i)*computeKernelMatrix(A,A,option);
+                partial_kernel = partial_kernel + eta(i)*computeKernelMatrix(y_mat,A,option);
+                single_kernel = single_kernel + eta(i)*computeKernelMatrix(y,y,option);
+            else
+                curr_kernel = curr_kernel + eta(i)*kernels{ker_num};
+                partial_kernel = partial_kernel + eta(i)*kernels{ker_num}(train_idx, :);
+                single_kernel = single_kernel + eta(i)*kernels{ker_num}(train_idx,train_idx);
+            end
         end
-        
-        curr_kernel = curr_kernel + eta(i)*computeKernelMatrix(A,A,option);
-        partial_kernel = partial_kernel + eta(i)*computeKernelMatrix(y_mat,A,option);
-        single_kernel = single_kernel + eta(i)*computeKernelMatrix(y,y,option);
     end
     
     partial_kernel = partial_kernel(1,:);

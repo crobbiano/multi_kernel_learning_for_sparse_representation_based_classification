@@ -5,81 +5,105 @@ clc
 addpath(genpath('srv1_9'));
 warning('off', 'MATLAB:nargchk:deprecated');
 %% Load some data
-% Load images and labels
-point1 = [30 30 40]';
-point2 = [10 10 10]';
-point3 = [35 17 40]';
-point4 = [12 15 212]';
+% MNIST Data
+useMNIST = 0;
+if useMNIST
+    total_num_training = 60000;
+    total_num_testing = 10000;
+    total_num = total_num_training  + total_num_testing;
+    % Read in all training and testing images and labels
+    [trainimgs,trainlabels,testimgs,testlabels] = readMNIST(total_num, 'E:\Documents\ece656\project\MNIST');
 
-% Make 20 random points around pos and neg
-% num_samples=100;
-% Y = zeros(numel(point1), num_samples);
-% l = zeros(1, num_samples);
-% for i=1:num_samples/4
-%     Y(:,i) = awgn(point1, 10);
-%     l(i) = 1;
-% end
-% for i=num_samples/4 + 1:num_samples/2
-%     Y(:,i) = awgn(point2, 10);
-%     l(i) = 2;
-% end
-% for i=num_samples/2 + 1:num_samples*3/4
-%     Y(:,i) = awgn(point3, 10);
-%     l(i) = 3;
-% end
-% for i=num_samples*3/4 + 1:num_samples
-%     Y(:,i) = awgn(point4, 10);
-%     l(i) = 4;
-% end
-%% MNIST Data
-total_num_training = 60000;
-total_num_testing = 10000;
-total_num = total_num_training  + total_num_testing;
-% Read in all training and testing images and labels
-[trainimgs,trainlabels,testimgs,testlabels] = readMNIST(total_num, 'E:\Documents\ece656\project\MNIST');
+    allimgs = [trainimgs, testimgs];
+    alllabels = [trainlabels; testlabels]';
 
-allimgs = [trainimgs, testimgs];
-alllabels = [trainlabels; testlabels]';
+    [trainsamples trainsamplesidxs] = datasample(allimgs,size(allimgs,2)*.007, 'Replace', false);
+    trainsampleslabels = alllabels(trainsamplesidxs);
 
-[trainsamples trainsamplesidxs] = datasample(allimgs,size(allimgs,2)*.003, 'Replace', false);
-trainsampleslabels = alllabels(trainsamplesidxs);
+    % find the non sampled images and store them
+    othersamplesidxs = setdiff(1:size(allimgs,2), trainsamplesidxs);
+    othersamples = allimgs(othersamplesidxs);
+    othersampleslabel = alllabels(othersamplesidxs);
 
-% find the non sampled images and store them
-othersamplesidxs = setdiff(1:size(allimgs,2), trainsamplesidxs);
-othersamples = allimgs(othersamplesidxs);
-othersampleslabel = alllabels(othersamplesidxs);
+    % generate testing and validation sets
+    numothers = numel(othersamples);
+    [testsamples testsamplesidxs] = datasample(othersamples,floor(numothers*.005), 'Replace', false);
+    testsampleslabels = othersampleslabel(testsamplesidxs);
 
-% generate testing and validation sets
-numothers = numel(othersamples);
-[testsamples testsamplesidxs] = datasample(othersamples,floor(numothers*.005), 'Replace', false);
-testsampleslabels = othersampleslabel(testsamplesidxs);
+    trainsamples_vec = zeros(28*28, numel(trainsamples));
+    testsamples_vec = zeros(28*28, numel(testsamples));
+    % imshow(reshape(trainsamples_vec(:,1), 28, 28))
+    writefiles = 0;
 
-trainsamples_vec = zeros(28*28, numel(trainsamples));
-testsamples_vec = zeros(28*28, numel(testsamples));
-% imshow(reshape(trainsamples_vec(:,1), 28, 28))
-writefiles = 0;
-
-for i = 1:numel(trainsamples)
-    trainsamples_vec(:, i) = reshape(trainsamples{i}, 28*28, 1);
-end
-for i = 1:numel(testsamples)
-    testsamples_vec(:, i) = reshape(testsamples{i}, 28*28, 1);
+    for i = 1:numel(trainsamples)
+        trainsamples_vec(:, i) = reshape(trainsamples{i}, 28*28, 1);
+    end
+    for i = 1:numel(testsamples)
+        testsamples_vec(:, i) = reshape(testsamples{i}, 28*28, 1);
+    end
+    
+    Y=trainsamples_vec;
+    l=trainsampleslabels+1;
+    [sorted, idx] = sort(l);
+    l=l(idx);
+    Y=Y(:,idx);
+    
+    Y2=testsamples_vec;
+    l2=testsampleslabels+1;
+    [sorted, idx] = sort(l2);
+    l2=l2(idx);
+    Y2=Y2(:,idx);
 end
 
-Y=trainsamples_vec;
-l=trainsampleslabels+1;
-[sorted, idx] = sort(l);
-l=l(idx);
-Y=Y(:,idx);
-
-Y2=testsamples_vec;
-l2=testsampleslabels+1;
-[sorted, idx] = sort(l2);
-l2=l2(idx);
-Y2=Y2(:,idx);
-
+useCaltech = 1;
+if useCaltech
+    imgsz = 128;
+    
+    imds = imageDatastore('101_ObjectCategories', 'IncludeSubfolders',true,'LabelSource','foldernames');
+    numTrainFiles = 5;
+    [imdsTrain,imdsTest] = splitEachLabel(imds,numTrainFiles,'randomize');
+    for i=1:length(imdsTrain.Files)
+        im = imread(imdsTrain.Files{i});
+        if size(im, 3) > 1
+            im = rgb2gray(im);
+        end
+        im = imresize(im, [imgsz imgsz]);
+        Y(:,i) = reshape(double(im), imgsz*imgsz, 1);
+    end
+    l_txt = imdsTrain.Labels;
+    l = grp2idx(l_txt);
+    l = l';
+    
+    [testfiles, tidx] = datasample(imdsTest.Files,floor(size(imdsTest.Files,1)*.01), 'Replace', false);
+    l2_txt = imdsTest.Labels;
+    l2_txt = l2_txt(tidx);
+    l2 = grp2idx(l2_txt);
+    l2 = l2';
+    for i=1:length(testfiles)
+        im = imread(testfiles{i});
+        if size(im, 3) > 1
+            im = rgb2gray(im);
+        end
+        im = imresize(im, [imgsz imgsz]);
+        Y2(:,i) = reshape(double(im), imgsz*imgsz, 1);
+    end
+end
+display(['Done loading data'])
 %% Make Dictionary
-Dict = Y;
+% Dict = Y;
+
+% Normalize each column of Y
+for i=1:size(Y,2)
+    Ynorm(:, i) = Y(:,i)/norm(Y(:,i));
+end
+for i=1:size(Y2,2)
+    Y2norm(:, i) = Y2(:,i)/norm(Y2(:,i));
+end
+Dict = Ynorm;
+Y=Ynorm;
+Y2 = Y2norm;
+
+display(['Done converting data'])
 %% Make kernel functions
 % Choose the kernel functions and make vector of them
 kappa  = { ...
@@ -157,15 +181,16 @@ end
 [sorted, idx] = sort(alignment_scores,'descend');
 ranked_mats = ranked_mats(idx,:);
 ranked_kappa = ranked_kappa(idx,:);
+% ranked_partial_mats = partial_kernel_mats(idx,:);
 %% Setup other parameters
 % overfitting_reg \mu
-mu = .2;
+mu = .02;
 % sparsity_reg \lambda
 lambda = .01;
 % max iterations
 T = 30;
 % error thresh for convergence
-err_thresh = .0005;
+err_thresh = .005;
 err = err_thresh + 1;
 
 % total number of samples
@@ -186,24 +211,25 @@ eta(1) = 1;
 %% Iterate until quitting conditions are satisfied
 t=0;
 h = zeros(1, size(Dict,2));
+x=zeros(size(Dict,2), numel(l));
 display("Beginning Processing...")
 while(t <= T && err>= err_thresh)
-    x=zeros(size(Dict,2), numel(l));
-    parfor i=1:N
+%     x=zeros(size(Dict,2), numel(l));
+    for i=1:N
         % Compute the sparse code x_i
-        x(:,i) = getCoeffs(x(:,i), Y(:,i), Dict, ranked_kappa, lambda, eta, 200, i);
+        x(:,i) = getCoeffs(x(:,i), Y(:,i), Dict, ranked_mats, ranked_kappa, lambda, eta, 200, i);
         % Compute the predicted label h_i using x_i
-        h(i) = calcZis(x(:,i), Y(:,i), Dict, ranked_kappa, eta, l);
-        if (mod(i, 100)==0)
+        h(i) = calcZis(x(:,i), Y(:,i), Dict, ranked_mats, ranked_kappa, eta, l, i, 0);
+        if (mod(i, 10)==0)
             display(['Finished calcing coeffs for the ' num2str(i) 'th sample'])
         end
     end
     
     % Precompute the predicted labels for each base kernel
     g = zeros(length(kappa), N);
-    parfor ker_num=1:length(kappa)
+    for ker_num=1:length(kappa)
         for i=1:N
-            g(ker_num, i) = calcZis(x(:,i), Y(:,i), Dict, ranked_kappa{ker_num}, 1, l);
+            g(ker_num, i) = calcZis(x(:,i), Y(:,i), Dict, ranked_mats, ranked_kappa{ker_num}, 1, l, i, ker_num);
         end
     end
     
@@ -218,18 +244,18 @@ while(t <= T && err>= err_thresh)
         end
         % Update weights for all m
         % find the best new kernel based on c
-%         [best_c_val,best_c_idx] = max(c(c ~=0 & eta == 0) );
-%         best_c_val_og = best_c_val;
-%         c_idxs = find(c~=0 & eta == 0);
+        [best_c_val,best_c_idx] = max(c(c ~=0 & eta == 0) );
+        best_c_val_og = best_c_val;
+        c_idxs = find(c~=0 & eta == 0);
 %         
-            [best_c_val,best_c_idx] = max(c(c ~=0) );
-            best_c_val_og = best_c_val;
-            c_idxs = find(c~=0);
+%             [best_c_val,best_c_idx] = max(c(c ~=0) );
+%             best_c_val_og = best_c_val;
+%             c_idxs = find(c~=0);
         
         best_c_idx = c_idxs(best_c_idx);
         for i=best_c_idx:-1:1
-            if (c(i) ~=0 & eta == 0) & (c(i) + mu > best_c_val_og)
-%             if (c(i) ~=0) & (c(i) + mu > best_c_val_og)
+%             if (c(i) ~=0 & eta == 0) & (c(i) + mu > best_c_val_og)
+            if (c(i) ~=0) & (c(i) + mu > best_c_val_og)
                 best_c_idx = i;
                 best_c_val = c(i);
                 display(['Changed best_c to higher index: ' num2str(i)])
@@ -239,7 +265,7 @@ while(t <= T && err>= err_thresh)
         
         if isempty(best_c_idx)
             display(['Cheating'])
-            new_kernel = 1;
+            new_kernel = randi(length(kappa),1);
             new_kernel_weight = .1;
             curr_kernel_weight = 1;
         else
@@ -274,11 +300,14 @@ if classify_ps
     num_samples2 = numel(l2);
     x2=zeros(size(Y,2), num_samples2);  % Must be the size of the kernel matrix
     predictions = zeros(num_samples2, 1);
-    for i=1:num_samples2
-        x2(:,i) = getCoeffs(x2(:,i), Y2(:,i), Dict, ranked_kappa, lambda, eta, 5000, 0);
+    parfor i=1:num_samples2
+        x2(:,i) = getCoeffs(x2(:,i), Y2(:,i), Dict, ranked_mats, ranked_kappa, lambda, eta, 200, 0);
         % Pass in l instead of l2 because we need to know the ordering of
         % classes in Dict
-        predictions(i, 1) = calcZis(x2(:,i), Y2(:,i), Dict, ranked_kappa, eta, l);
+        predictions(i, 1) = calcZis(x2(:,i), Y2(:,i), Dict, ranked_mats, ranked_kappa, eta, l, 0);
+        if (mod(i, 10)==0)
+            display(['Finished calcing coeffs for the ' num2str(i) 'th sample'])
+        end
     end
     pred_mask = (predictions'==l2)';
     display(['Predicted: ' num2str(100*sum(predictions'==l2)/numel(l2)) '%'])

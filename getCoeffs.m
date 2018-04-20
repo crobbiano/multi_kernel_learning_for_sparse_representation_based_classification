@@ -1,4 +1,4 @@
-function [x] = getCoeffs(prev_x, y, A, kappa, lambda, eta, num_iter, train_idx)
+function [x] = getCoeffs(prev_x, y, A, kernels, kappa, lambda, eta, num_iter, train_idx)
     %UNTITLED Summary of this function goes here
     %   Detailed explanation goes here
     
@@ -16,9 +16,15 @@ function [x] = getCoeffs(prev_x, y, A, kappa, lambda, eta, num_iter, train_idx)
     
     for i=1:length(kappa)
         option.kernel = 'cust'; option.kernelfnc=kappa{i};
-        curr_kernel = curr_kernel + eta(i)*computeKernelMatrix(A,A,option);
-        partial_kernel = partial_kernel + eta(i)*computeKernelMatrix(y_mat,A,option);
-        single_kernel = single_kernel + eta(i)*computeKernelMatrix(y,y,option);
+        if train_idx == 0
+            curr_kernel = curr_kernel + eta(i)*computeKernelMatrix(A,A,option);
+            partial_kernel = partial_kernel + eta(i)*computeKernelMatrix(y_mat,A,option);
+            single_kernel = single_kernel + eta(i)*computeKernelMatrix(y,y,option);
+        else 
+            curr_kernel = curr_kernel + eta(i)*kernels{i};
+            partial_kernel = partial_kernel + eta(i)*kernels{i}(train_idx, :);
+            single_kernel = single_kernel + eta(i)*kernels{i}(train_idx,train_idx);
+        end
     end
     
     partial_kernel = partial_kernel(1,:);
