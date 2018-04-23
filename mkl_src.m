@@ -1,40 +1,40 @@
 %% MLK - SRC
 clear all
-close all
+% close all
 clc
 addpath(genpath('srv1_9'));
 warning('off', 'MATLAB:nargchk:deprecated');
 %% Load some data
 % MNIST Data
-useMNIST = 0;
+useMNIST = 1;
 if useMNIST
     total_num_training = 60000;
     total_num_testing = 10000;
     total_num = total_num_training  + total_num_testing;
     % Read in all training and testing images and labels
-    [trainimgs,trainlabels,testimgs,testlabels] = readMNIST(total_num, 'E:\Documents\ece656\project\MNIST');
-
+    [trainimgs,trainlabels,testimgs,testlabels] = readMNIST(total_num, 'MNIST');
+    
     allimgs = [trainimgs, testimgs];
     alllabels = [trainlabels; testlabels]';
-
-    [trainsamples trainsamplesidxs] = datasample(allimgs,size(allimgs,2)*.007, 'Replace', false);
+    
+    [trainsamples trainsamplesidxs] = datasample(allimgs,size(allimgs,2)*.005, 'Replace', false);
     trainsampleslabels = alllabels(trainsamplesidxs);
-
+    
     % find the non sampled images and store them
     othersamplesidxs = setdiff(1:size(allimgs,2), trainsamplesidxs);
     othersamples = allimgs(othersamplesidxs);
     othersampleslabel = alllabels(othersamplesidxs);
-
+    
     % generate testing and validation sets
     numothers = numel(othersamples);
-    [testsamples testsamplesidxs] = datasample(othersamples,floor(numothers*.005), 'Replace', false);
+    [testsamples testsamplesidxs] = datasample(othersamples,floor(numothers*.004), 'Replace', false);
     testsampleslabels = othersampleslabel(testsamplesidxs);
-
+    
     trainsamples_vec = zeros(28*28, numel(trainsamples));
     testsamples_vec = zeros(28*28, numel(testsamples));
     % imshow(reshape(trainsamples_vec(:,1), 28, 28))
     writefiles = 0;
-
+    
     for i = 1:numel(trainsamples)
         trainsamples_vec(:, i) = reshape(trainsamples{i}, 28*28, 1);
     end
@@ -55,30 +55,34 @@ if useMNIST
     Y2=Y2(:,idx);
 end
 
-useCaltech = 1;
+useCaltech = 0;
 if useCaltech
-    imgsz = 128;
+    imgsz = 28;
     
     imds = imageDatastore('101_ObjectCategories', 'IncludeSubfolders',true,'LabelSource','foldernames');
-    numTrainFiles = 5;
+    numTrainFiles = 10;
     [imdsTrain,imdsTest] = splitEachLabel(imds,numTrainFiles,'randomize');
     for i=1:length(imdsTrain.Files)
         im = imread(imdsTrain.Files{i});
         if size(im, 3) > 1
             im = rgb2gray(im);
         end
+        %         figure(1); imshow(im,[])
         im = imresize(im, [imgsz imgsz]);
+        %         figure(2); imshow(double(im),[])
         Y(:,i) = reshape(double(im), imgsz*imgsz, 1);
+        %         figure(3); imshow(reshape(Y(:,i), 128, 128),[])
     end
     l_txt = imdsTrain.Labels;
     l = grp2idx(l_txt);
     l = l';
     
-    [testfiles, tidx] = datasample(imdsTest.Files,floor(size(imdsTest.Files,1)*.01), 'Replace', false);
+    [testfiles, tidx] = datasample(imdsTest.Files,floor(size(imdsTest.Files,1)*.02), 'Replace', false);
     l2_txt = imdsTest.Labels;
     l2_txt = l2_txt(tidx);
     l2 = grp2idx(l2_txt);
     l2 = l2';
+    [l2, l2idx] = sort(l2);
     for i=1:length(testfiles)
         im = imread(testfiles{i});
         if size(im, 3) > 1
@@ -87,21 +91,32 @@ if useCaltech
         im = imresize(im, [imgsz imgsz]);
         Y2(:,i) = reshape(double(im), imgsz*imgsz, 1);
     end
+    Y2 = Y2(:,l2idx);
 end
 display(['Done loading data'])
 %% Make Dictionary
 % Dict = Y;
 
 % Normalize each column of Y
+meanY = mean(Y, 2);
 for i=1:size(Y,2)
     Ynorm(:, i) = Y(:,i)/norm(Y(:,i));
+    Ycent(:,i) = Y(:,i) - meanY;
 end
+meanY2 = mean(Y2, 2);
 for i=1:size(Y2,2)
     Y2norm(:, i) = Y2(:,i)/norm(Y2(:,i));
+    Y2cent(:,i) = Y2(:,i) - meanY2;
 end
-Dict = Ynorm;
-Y=Ynorm;
-Y2 = Y2norm;
+Dict = Y;
+
+% Dict = Ycent;
+% Y=Ycent;
+% Y2=Y2cent;
+
+% Dict = Ynorm;
+% Y=Ynorm;
+% Y2 = Y2norm;
 
 display(['Done converting data'])
 %% Make kernel functions
@@ -179,18 +194,21 @@ for i=1:length(ranked_mats)
     alignment_scores(i) = kernelAlignment(kernel_mats{i}, K_ideal);
 end
 [sorted, idx] = sort(alignment_scores,'descend');
-ranked_mats = ranked_mats(idx,:);
-ranked_kappa = ranked_kappa(idx,:);
+ranked_mats_master = ranked_mats(idx,:);
+ranked_kappa_master = ranked_kappa(idx,:);
+
+ranked_mats = ranked_mats_master(1:13,:);
+ranked_kappa = ranked_kappa_master(1:13,:);
 % ranked_partial_mats = partial_kernel_mats(idx,:);
 %% Setup other parameters
 % overfitting_reg \mu
 mu = .02;
 % sparsity_reg \lambda
-lambda = .01;
+lambda = .1;
 % max iterations
-T = 30;
+T = 10;
 % error thresh for convergence
-err_thresh = .005;
+err_thresh = .01;
 err = err_thresh + 1;
 
 % total number of samples
@@ -211,26 +229,31 @@ eta(1) = 1;
 %% Iterate until quitting conditions are satisfied
 t=0;
 h = zeros(1, size(Dict,2));
-x=zeros(size(Dict,2), numel(l));
 display("Beginning Processing...")
 while(t <= T && err>= err_thresh)
-%     x=zeros(size(Dict,2), numel(l));
-    for i=1:N
+    x=zeros(size(Dict,2), numel(l));
+    fprintf('Coeff progress:\n');
+    fprintf(['\n' repmat('.',1,N) '\n\n']);
+    parfor i=1:N
         % Compute the sparse code x_i
-        x(:,i) = getCoeffs(x(:,i), Y(:,i), Dict, ranked_mats, ranked_kappa, lambda, eta, 200, i);
+        x(:,i) = getCoeffs(x(:,i), Y(:,i), Dict, ranked_mats, ranked_kappa, lambda, eta, 500, i);
         % Compute the predicted label h_i using x_i
         h(i) = calcZis(x(:,i), Y(:,i), Dict, ranked_mats, ranked_kappa, eta, l, i, 0);
-        if (mod(i, 10)==0)
-            display(['Finished calcing coeffs for the ' num2str(i) 'th sample'])
-        end
+        %         if (mod(i, 100)==0)
+        %             display(['Finished calcing coeffs for the ' num2str(i) 'th sample'])
+        %         end
+        fprintf('\b|\n');
     end
     
     % Precompute the predicted labels for each base kernel
-    g = zeros(length(kappa), N);
-    for ker_num=1:length(kappa)
+    g = zeros(length(ranked_kappa), N);
+    fprintf('Z progress:\n');
+    fprintf(['\n' repmat('.',1,length(ranked_kappa)) '\n\n']);
+    parfor ker_num=1:length(ranked_kappa)
         for i=1:N
             g(ker_num, i) = calcZis(x(:,i), Y(:,i), Dict, ranked_mats, ranked_kappa{ker_num}, 1, l, i, ker_num);
         end
+        fprintf('\b|\n');
     end
     
     z = (h == l);
@@ -238,34 +261,40 @@ while(t <= T && err>= err_thresh)
     if length(z)/sum(z) == 1
         err = 0;
     else
-        for m=1:length(kappa)
+        for m=1:length(ranked_kappa)
             zm(m,:) = g(m,:) == l;
             c(m,1) = sum(zm(m, find(z==0)))/sum(1-z);
         end
         % Update weights for all m
         % find the best new kernel based on c
-        [best_c_val,best_c_idx] = max(c(c ~=0 & eta == 0) );
-        best_c_val_og = best_c_val;
-        c_idxs = find(c~=0 & eta == 0);
-%         
-%             [best_c_val,best_c_idx] = max(c(c ~=0) );
-%             best_c_val_og = best_c_val;
-%             c_idxs = find(c~=0);
         
+%                 [best_c_val,best_c_idx] = max(c(c ~=0 & eta == 0) );
+%                 best_c_val_og = best_c_val;
+%                 c_idxs = find(c~=0 & eta == 0);
+        
+        [best_c_val,best_c_idx] = max(c(c ~=0) ); % THIS WORKS
+        best_c_val_og = best_c_val;
+        c_idxs = find(c~=0);
         best_c_idx = c_idxs(best_c_idx);
-        for i=best_c_idx:-1:1
-%             if (c(i) ~=0 & eta == 0) & (c(i) + mu > best_c_val_og)
-            if (c(i) ~=0) & (c(i) + mu > best_c_val_og)
-                best_c_idx = i;
-                best_c_val = c(i);
-                display(['Changed best_c to higher index: ' num2str(i)])
+        update_c = 0;
+        if update_c
+            for i=best_c_idx:-1:1
+                %             if (c(i) ~=0 & eta == 0) & (c(i) + mu > best_c_val_og)
+                if (c(i) ~=0) & (c(i) + mu > best_c_val_og)  % THIS WORKS
+                    best_c_idx = i;
+                    best_c_val = c(i);
+                    display(['Changed best_c to higher index: ' num2str(i)])
+                end
             end
         end
         
-        
         if isempty(best_c_idx)
             display(['Cheating'])
-            new_kernel = randi(length(kappa),1);
+            new_kernel = randi(length(ranked_kappa),1);
+            % %             [~, new_kernel] = max(c);
+            %             new_kernel_weight = sum(bitand(zm(new_kernel,:), not(z)))/sum(bitor(not(z), not(zm(new_kernel,:))));
+            %             curr_kernel_weight = sum(bitand(z, not(zm(new_kernel,:))))/sum(bitor(not(z), not(zm(new_kernel,:))));
+            
             new_kernel_weight = .1;
             curr_kernel_weight = 1;
         else
@@ -276,7 +305,7 @@ while(t <= T && err>= err_thresh)
         
         prev_eta = eta; % save for calcing error
         % Do the actual mixing weight update here
-        for m=1:length(kappa)
+        for m=1:length(ranked_kappa)
             if m==new_kernel
                 eta(m)=new_kernel_weight;
             else
@@ -292,7 +321,17 @@ while(t <= T && err>= err_thresh)
         err = norm(prev_eta - eta,2);
     end
     t = t + 1;
-    display(['Iteration: ' num2str(t) '/' num2str(T) ' Error: ' num2str(err)])
+    display(['Iteration: ' num2str(t) '/' num2str(T) ' Accuracy: ' num2str(sum(z)/numel(z)) ' Error: ' num2str(err)])
+    curr_kernel = 0;
+    for lll=1:length(ranked_kappa)
+        curr_kernel = curr_kernel + eta(lll)*ranked_mats{lll};
+    end
+end
+%% Some other calcs
+Yt = Dict*x;
+errors = Y-Yt;
+for i=1:size(errors,2)
+    error_norm(i) = norm(errors(:, i));
 end
 %% Classify some new points
 classify_ps = 1;
@@ -300,14 +339,17 @@ if classify_ps
     num_samples2 = numel(l2);
     x2=zeros(size(Y,2), num_samples2);  % Must be the size of the kernel matrix
     predictions = zeros(num_samples2, 1);
+    fprintf('Coeff progress:\n');
+    fprintf(['\n' repmat('.',1,num_samples2) '\n\n']);
     parfor i=1:num_samples2
-        x2(:,i) = getCoeffs(x2(:,i), Y2(:,i), Dict, ranked_mats, ranked_kappa, lambda, eta, 200, 0);
+        x2(:,i) = getCoeffs(x2(:,i), Y2(:,i), Dict, ranked_mats, ranked_kappa, lambda, eta, 50, 0);
         % Pass in l instead of l2 because we need to know the ordering of
         % classes in Dict
         predictions(i, 1) = calcZis(x2(:,i), Y2(:,i), Dict, ranked_mats, ranked_kappa, eta, l, 0);
-        if (mod(i, 10)==0)
-            display(['Finished calcing coeffs for the ' num2str(i) 'th sample'])
-        end
+        %         if (mod(i, 10)==0)
+        %             display(['Finished calcing coeffs for the ' num2str(i) 'th sample'])
+        %         end
+        fprintf('\b|\n');
     end
     pred_mask = (predictions'==l2)';
     display(['Predicted: ' num2str(100*sum(predictions'==l2)/numel(l2)) '%'])

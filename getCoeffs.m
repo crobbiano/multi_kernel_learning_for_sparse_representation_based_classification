@@ -28,19 +28,7 @@ function [x] = getCoeffs(prev_x, y, A, kernels, kappa, lambda, eta, num_iter, tr
     end
     
     partial_kernel = partial_kernel(1,:);
-    
-    
-    %     for m=1:length(kappa)
-    %         K = zeros(size(A,2), size(A,2));
-    %         for i=1:size(A,2)
-    %             for j=1:size(A,2)
-    %                 K(i,j) = eta(m)*kappa{m}(A(:,i), A(:,j));
-    %             end
-    %             partial_kernel(i) = partial_kernel(i) + eta(m)*kappa{m}(y, A(:,i));
-    %         end
-    %         curr_kernel = curr_kernel + K;
-    %         single_kernel = single_kernel + eta(m)*kappa{m}(y, y);
-    %     end
+ 
     
     if train_idx > 0
         partial_kernel(:, train_idx) = 0;
@@ -51,6 +39,7 @@ function [x] = getCoeffs(prev_x, y, A, kernels, kappa, lambda, eta, num_iter, tr
     option.lambda = lambda;
     option.iter = num_iter;
 %     option.SCMethod='l1qpAS';
+%     option.SCMethod='l1nnlsSMO';
     x = KSRSC(curr_kernel, partial_kernel', single_kernel, option);
 end
 
