@@ -146,6 +146,7 @@ for i=1:num_classes
     locs = find(trainClassSmall == classes(i));
     K_ideal(min(locs):max(locs),min(locs):max(locs)) = 1;
 end
+
 %% Get ranked ordering of kfncs based on similarity to ideal kernel
 for i=1:length(kfncs)
     alignment_scores(i) = kernelAlignment(kernel_mats{i}, K_ideal);
@@ -153,12 +154,38 @@ end
 [sorted, idx] = sort(alignment_scores,'descend');
 kernel_mats = kernel_mats(idx);
 kfncs = kfncs(idx);
+%% Compute more kernel matrices
+for kidx=1:length(kfncs)
+    eta_temp = [];
+    eta_temp(kidx) = 1; % place a 1 in the current kernel
+    
+    Hfull{kidx}=computeMultiKernelMatrix(Dict,Dict,eta_temp,kfncs);
+    for sidx=1:length(validClassSmall) 
+        Gfull{kidx,sidx}=computeMultiKernelMatrix(Dict,validSetSmall(:,sidx),eta_temp,kfncs);
+        Bfull{kidx,sidx}=computeMultiKernelMatrix(validSetSmall(:,sidx),validSetSmall(:,sidx),eta_temp,kfncs);
+    end
+end
 %% Generate eta
 eta = zeros(length(kfncs),1);
 eta(1)=1;
 % eta(2)=.5;
-%% Loop to get all sparse coeffs
+%% Parameters
+mu = .02;
+% sparsity_reg \lambda
+lambda = .1;
+% max iterations
+T = 10;
+% error thresh for convergence
+err_thresh = .1;
+err = err_thresh + 1;
 
+optionKSRSC.lambda=lambda;
+% optionKSRSC.SCMethod='l1qpAS'; % can be nnqpAS, l1qpAS, nnqpIP, l1qpIP, l1qpPX, nnqpSMO, l1qpSMO
+optionKSRSC.iter=200;
+optionKSRSC.dis=0;
+optionKSRSC.residual=1e-4;
+optionKSRSC.tof=1e-4;
+%% Loop to get all sparse coeffs
 % Find the number of samples in each class
 classes = unique(trainClassSmall);
 num_classes = numel(classes);
@@ -166,111 +193,111 @@ for i=1:num_classes
     num_per_class(i) = sum(trainClassSmall == classes(i));
 end
 
-optionKSRSC.lambda=0.1;
-% optionKSRSC.SCMethod='l1qpAS'; % can be nnqpAS, l1qpAS, nnqpIP, l1qpIP, l1qpPX, nnqpSMO, l1qpSMO
-optionKSRSC.iter=200;
-optionKSRSC.dis=0;
-optionKSRSC.residual=1e-4;
-optionKSRSC.tof=1e-4;
-
-fprintf('Coeff progress:\n');
-fprintf(['\n' repmat('.',1,size(validSetSmall, 2)) '\n\n']);
-for idx = 1:size(validSetSmall, 2)
-    testSet = validSetSmall(:,idx);
-    testClass = validClassSmall(idx);
+t = 0;
+while(t <= T && err>= err_thresh)
+    t = t + 1;
     
-    % compute kernels
     H=computeMultiKernelMatrix(Dict,Dict,eta,kfncs);
-    G=computeMultiKernelMatrix(Dict,testSet,eta,kfncs);
-    B=computeMultiKernelMatrix(testSet,testSet,eta,kfncs);
     
-    % KSRSC sparse coding
-    X(:, idx)=KSRSC(H,G,diag(B),optionKSRSC);
-    sparsity(idx) = (numel(X(:,idx)) - sum(X(:,idx)>0) )/ numel(X(:,idx));
-    ssims(idx) = ssim(reshape(Dict*X(:,idx), 28, 28), reshape(validSetSmall(:,idx), 28, 28));
-    immses(idx) = immse(Dict*X(:,idx), validSetSmall(:,idx));
-    
-    % Find class - calculate h (class) and z (correct class)
-    err = zeros(1, num_classes);
-    for class=1:num_classes
-        b_idx = sum(num_per_class(1:class-1)) + 1;
-        e_idx = sum(num_per_class(1:class));
-        x_c = X(b_idx:e_idx ,idx);
-        kernel_c = H(b_idx:e_idx ,b_idx:e_idx);
-        partial_c = G(b_idx:e_idx)';
-        err(class) = B + x_c'*kernel_c*x_c - 2*partial_c*x_c;
-    end
-    [~, h(idx)] = min(err);
-    h(idx) = h(idx) - 1;  % Adjust for indexing in matlab
-    z(idx) = (h(idx) == validClassSmall(idx));
-    
-    % Need to calculate the ability to classify for each individual kernel
-    for kidx=1:length(kfncs)
-        eta_temp = [];
-        eta_temp(kidx) = 1; % place a 1 in the current kernel
+    fprintf('Coeff progress:\n');
+    fprintf(['\n' repmat('.',1,size(validSetSmall, 2)) '\n\n']);
+    for idx = 1:size(validSetSmall, 2)
+        testSet = validSetSmall(:,idx);
+        testClass = validClassSmall(idx);
         
-        H_temp=computeMultiKernelMatrix(Dict,Dict,eta_temp,kfncs);
-        G_temp=computeMultiKernelMatrix(Dict,testSet,eta_temp,kfncs);
-        B_temp=computeMultiKernelMatrix(testSet,testSet,eta_temp,kfncs);
-        err_temp = zeros(1, num_classes);
+        % compute kernels
+        G=computeMultiKernelMatrix(Dict,testSet,eta,kfncs);
+        B=computeMultiKernelMatrix(testSet,testSet,eta,kfncs);
+        
+        % KSRSC sparse coding
+        X(:, idx)=KSRSC(H,G,diag(B),optionKSRSC);
+%         sparsity(idx) = (numel(X(:,idx)) - sum(X(:,idx)>0) )/ numel(X(:,idx));
+%         ssims(idx) = ssim(reshape(Dict*X(:,idx), 28, 28), reshape(validSetSmall(:,idx), 28, 28));
+%         immses(idx) = immse(Dict*X(:,idx), validSetSmall(:,idx));
+        
+        % Find class - calculate h (class) and z (correct class)
+        classerr = zeros(1, num_classes);
         for class=1:num_classes
             b_idx = sum(num_per_class(1:class-1)) + 1;
             e_idx = sum(num_per_class(1:class));
             x_c = X(b_idx:e_idx ,idx);
-            kernel_c = H_temp(b_idx:e_idx ,b_idx:e_idx);
-            partial_c = G_temp(b_idx:e_idx)';
-            err_temp(class) = B_temp + x_c'*kernel_c*x_c - 2*partial_c*x_c;
+            kernel_c = H(b_idx:e_idx ,b_idx:e_idx);
+            partial_c = G(b_idx:e_idx)';
+            classerr(class) = B + x_c'*kernel_c*x_c - 2*partial_c*x_c;
         end
-        [~, h_temp] = min(err_temp);
-        h_temp = h_temp - 1;  % Adjust for indexing in matlab
-        g(kidx, idx) = h_temp;
-        zm(kidx, idx) = g(kidx, idx) == validClassSmall(idx);
+        [~, h(idx)] = min(classerr);
+        h(idx) = h(idx) - 1;  % Adjust for indexing in matlab
+        z(idx) = (h(idx) == validClassSmall(idx));
         
-        if sum(1-z)
-            c(kidx,1) = sum(zm(kidx, find(z==0)))/sum(1-z);
-        else
-            c(kidx,1) = 1;
-        end
-    end
-    
-    fprintf('\b|\n');
-end
-
-% Calculate the C values
-if length(z)/sum(z) == 1
-    err = 0;
-else
-    [best_c_val,best_c_idx] = max(c); % THIS WORKS
-    best_c_val_og = best_c_val;
-    update_c = 1;
-    if update_c
-        for i=best_c_idx:-1:1
-            if (c(i) ~=0) & (c(i) + .2 > best_c_val_og)  % THIS WORKS
-                best_c_idx = i;
-                best_c_val = c(i);
-                display(['Changed best_c to higher index: ' num2str(i)])
+        % Need to calculate the ability to classify for each individual kernel
+        for kidx=1:length(kfncs)
+            eta_temp = [];
+            eta_temp(kidx) = 1; % place a 1 in the current kernel
+            
+            H_temp=computeMultiKernelMatrix(Dict,Dict,eta_temp,kfncs);
+            G_temp=computeMultiKernelMatrix(Dict,testSet,eta_temp,kfncs);
+            B_temp=computeMultiKernelMatrix(testSet,testSet,eta_temp,kfncs);
+            err_temp = zeros(1, num_classes);
+            for class=1:num_classes
+                b_idx = sum(num_per_class(1:class-1)) + 1;
+                e_idx = sum(num_per_class(1:class));
+                x_c = X(b_idx:e_idx ,idx);
+                kernel_c = H_temp(b_idx:e_idx ,b_idx:e_idx);
+                partial_c = G_temp(b_idx:e_idx)';
+                err_temp(class) = B_temp + x_c'*kernel_c*x_c - 2*partial_c*x_c;
+            end
+            [~, h_temp] = min(err_temp);
+            h_temp = h_temp - 1;  % Adjust for indexing in matlab
+            g(kidx, idx) = h_temp;
+            zm(kidx, idx) = g(kidx, idx) == validClassSmall(idx);
+            
+            if sum(1-z)
+                c(kidx,1) = sum(zm(kidx, find(z==0)))/sum(1-z);
+            else
+                c(kidx,1) = 1;
             end
         end
+        
+        fprintf('\b|\n');
     end
-    new_kernel = best_c_idx;
-    new_kernel_weight = sum(bitand(zm(new_kernel,:), not(z)))/sum(bitor(not(z), not(zm(new_kernel,:))));
-    curr_kernel_weight = sum(bitand(z, not(zm(new_kernel,:))))/sum(bitor(not(z), not(zm(new_kernel,:))));
-    prev_eta = eta; % save for calcing error
-    % Do the actual mixing weight update here
-    for m=1:length(kfncs)
-        if m==new_kernel
-            eta(m)=new_kernel_weight;
-        else
-            eta(m) = eta(m)*curr_kernel_weight;
+    
+    % Calculate the C values
+    if sum(z)/length(z) == 1
+        err = 0;
+    else
+        [best_c_val,best_c_idx] = max(c); % THIS WORKS
+        best_c_val_og = best_c_val;
+        update_c = 1;
+        if update_c
+            for i=best_c_idx:-1:1
+                if (c(i) ~=0) & (c(i) + mu > best_c_val_og)  % THIS WORKS
+                    best_c_idx = i;
+                    best_c_val = c(i);
+                    display(['Changed best_c to higher index: ' num2str(i)])
+                end
+            end
         end
+        new_kernel = best_c_idx;
+        new_kernel_weight = sum(bitand(zm(new_kernel,:), not(z)))/sum(bitor(not(z), not(zm(new_kernel,:))));
+        curr_kernel_weight = sum(bitand(z, not(zm(new_kernel,:))))/sum(bitor(not(z), not(zm(new_kernel,:))));
+        prev_eta = eta; % save for calcing error
+        % Do the actual mixing weight update here
+        for m=1:length(kfncs)
+            if m==new_kernel
+                eta(m)=new_kernel_weight;
+            else
+                eta(m) = eta(m)*curr_kernel_weight;
+            end
+        end
+        
+        % Compute sums of all weights and normalize weights by sum
+        total_weights = sum(eta);
+        eta = eta/total_weights;
+        
+        % set err = ||eta^{t-1}-eta^{t}||_2
+        err = norm(prev_eta - eta,2);
     end
-    
-    % Compute sums of all weights and normalize weights by sum
-    total_weights = sum(eta);
-    eta = eta/total_weights;
-    
-    % set err = ||eta^{t-1}-eta^{t}||_2
-    err = norm(prev_eta - eta,2);
+    display(['Iteration: ' num2str(t) '/' num2str(T) ' Accuracy: ' num2str(sum(z)/numel(z)) ' Error: ' num2str(err)])
 end
 %% Look at the recon errors
 errors = validSetSmall - Dict*X;
