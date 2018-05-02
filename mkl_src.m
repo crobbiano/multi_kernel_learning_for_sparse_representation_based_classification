@@ -1,144 +1,103 @@
-%% MLK - SRC
-clear all
-% close all
 clc
+clear
 addpath(genpath('srv1_9'));
-warning('off', 'MATLAB:nargchk:deprecated');
-%% Load some data
-% MNIST Data
-useMNIST = 1;
-if useMNIST
-    total_num_training = 60000;
-    total_num_testing = 10000;
-    total_num = total_num_training  + total_num_testing;
-    % Read in all training and testing images and labels
-    [trainimgs,trainlabels,testimgs,testlabels] = readMNIST(total_num, 'MNIST');
+saveSet = 0;
+if saveSet
+    % load('data/smallRoundBlueCellTumorOFChildhood.mat');
+    load('mnist_data.mat');
+    Data = double(Data);
+    dataStr='SRBCT';
+    D=Data;
+    % clear('Data');
     
-    allimgs = [trainimgs, testimgs];
-    alllabels = [trainlabels; testlabels]';
+    % normalize D
+    D=normc(D);
     
-    [trainsamples trainsamplesidxs] = datasample(allimgs,size(allimgs,2)*.005, 'Replace', false);
-    trainsampleslabels = alllabels(trainsamplesidxs);
     
-    % find the non sampled images and store them
-    othersamplesidxs = setdiff(1:size(allimgs,2), trainsamplesidxs);
-    othersamples = allimgs(othersamplesidxs);
-    othersampleslabel = alllabels(othersamplesidxs);
+    % reset the random number generator
+    s = RandStream('swb2712','Seed',1);
+    % RandStream.setDefaultStream(s);
     
-    % generate testing and validation sets
-    numothers = numel(othersamples);
-    [testsamples testsamplesidxs] = datasample(othersamples,floor(numothers*.004), 'Replace', false);
-    testsampleslabels = othersampleslabel(testsamplesidxs);
+    % CV
+    kfold=5;
+    ind=crossvalind('Kfold',classes,kfold);
+    indTest=logical(sum(ind==1:3,2));
+    indTrain=logical(sum(ind==4:5,2));
+    trainClass=classes(indTrain);
+    testClass=classes(indTest);
     
-    trainsamples_vec = zeros(28*28, numel(trainsamples));
-    testsamples_vec = zeros(28*28, numel(testsamples));
-    % imshow(reshape(trainsamples_vec(:,1), 28, 28))
-    writefiles = 0;
+    [~, idxs] = sort(trainClass);
+    trainClass = trainClass(idxs);
+    trainSet=D(:,indTrain);
+    trainSet = trainSet(:,idxs);
+    [~, idxs] = sort(testClass);
+    testClass = testClass(idxs);
+    testSet=D(:,indTest);
+    testSet = testSet(:,idxs);
     
-    for i = 1:numel(trainsamples)
-        trainsamples_vec(:, i) = reshape(trainsamples{i}, 28*28, 1);
-    end
-    for i = 1:numel(testsamples)
-        testsamples_vec(:, i) = reshape(testsamples{i}, 28*28, 1);
-    end
+    % Get a set of digits 0-3 from the trainSet and 0-4 from the testSet
+    trainIdx = logical(sum(trainClass'==0:3, 2));
+    testIdx = logical(sum(testClass'==0:4, 2));
     
-    Y=trainsamples_vec;
-    l=trainsampleslabels+1;
-    [sorted, idx] = sort(l);
-    l=l(idx);
-    Y=Y(:,idx);
+    savedTrainSet = trainSet(:,trainIdx);
+    savedTrainClass = trainClass(trainIdx);
+    savedTestSet = testSet(:,testIdx);
+    savedTestClass = testClass(testIdx);
     
-    Y2=testsamples_vec;
-    l2=testsampleslabels+1;
-    [sorted, idx] = sort(l2);
-    l2=l2(idx);
-    Y2=Y2(:,idx);
+    
+    trainSet = savedTrainSet;
+    trainClass = savedTrainClass;
+    testSet = savedTestSet;
+    testClass = savedTestClass;
+    kfold=192;
+    ind=crossvalind('Kfold',trainClass,kfold);
+    indTrain=logical(sum(ind==1:16,2));
+    indValid=logical(sum(ind==17:37,2));
+    
+    kfold=500;
+    ind=crossvalind('Kfold',testClass,kfold);
+    indTest=logical(sum(ind==1:20,2));
+    
+    trainClassSmall=trainClass(indTrain);
+    trainSetSmall=trainSet(:,indTrain);
+    validClassSmall=trainClass(indValid);
+    validSetSmall=trainSet(:,indValid);
+    testClassSmall=testClass(indTest);
+    testSetSmall=testSet(:,indTest);
+    
+    save('mnist_train_0-3_test_0-4.mat', 'trainSet', 'trainClass', 'testSet', 'testClass', 'trainSetSmall', 'trainClassSmall', 'testSetSmall', 'testClassSmall', 'validSetSmall', 'validClassSmall')
+else
+    load('mnist_train_0-3_test_0-4.mat');
 end
+%%
+% Save the dictionary
+Dict = trainSetSmall;
 
-useCaltech = 0;
-if useCaltech
-    imgsz = 28;
-    
-    imds = imageDatastore('101_ObjectCategories', 'IncludeSubfolders',true,'LabelSource','foldernames');
-    numTrainFiles = 10;
-    [imdsTrain,imdsTest] = splitEachLabel(imds,numTrainFiles,'randomize');
-    for i=1:length(imdsTrain.Files)
-        im = imread(imdsTrain.Files{i});
-        if size(im, 3) > 1
-            im = rgb2gray(im);
-        end
-        %         figure(1); imshow(im,[])
-        im = imresize(im, [imgsz imgsz]);
-        %         figure(2); imshow(double(im),[])
-        Y(:,i) = reshape(double(im), imgsz*imgsz, 1);
-        %         figure(3); imshow(reshape(Y(:,i), 128, 128),[])
-    end
-    l_txt = imdsTrain.Labels;
-    l = grp2idx(l_txt);
-    l = l';
-    
-    [testfiles, tidx] = datasample(imdsTest.Files,floor(size(imdsTest.Files,1)*.02), 'Replace', false);
-    l2_txt = imdsTest.Labels;
-    l2_txt = l2_txt(tidx);
-    l2 = grp2idx(l2_txt);
-    l2 = l2';
-    [l2, l2idx] = sort(l2);
-    for i=1:length(testfiles)
-        im = imread(testfiles{i});
-        if size(im, 3) > 1
-            im = rgb2gray(im);
-        end
-        im = imresize(im, [imgsz imgsz]);
-        Y2(:,i) = reshape(double(im), imgsz*imgsz, 1);
-    end
-    Y2 = Y2(:,l2idx);
-end
-display(['Done loading data'])
-%% Make Dictionary
-% Dict = Y;
-
-% Normalize each column of Y
-meanY = mean(Y, 2);
-for i=1:size(Y,2)
-    Ynorm(:, i) = Y(:,i)/norm(Y(:,i));
-    Ycent(:,i) = Y(:,i) - meanY;
-end
-meanY2 = mean(Y2, 2);
-for i=1:size(Y2,2)
-    Y2norm(:, i) = Y2(:,i)/norm(Y2(:,i));
-    Y2cent(:,i) = Y2(:,i) - meanY2;
-end
-Dict = Y;
-
-% Dict = Ycent;
-% Y=Ycent;
-% Y2=Y2cent;
-
-% Dict = Ynorm;
-% Y=Ynorm;
-% Y2 = Y2norm;
-
-display(['Done converting data'])
-%% Make kernel functions
-% Choose the kernel functions and make vector of them
-kappa  = { ...
+% FIXME - X should be N by M where N is number of atoms and M is number of
+% testing samples. Happens that M == N
+X = zeros(size(Dict, 2), size(validSetSmall, 2));
+sparsity = zeros(1, size(validSetSmall,2));
+ssims = zeros(1, size(validSetSmall,2));
+immses = zeros(1, size(validSetSmall,2));
+%% Generate kernel fncs
+kfncs  = { ...
     @(x,y) x'*y; ...            % Linear
     @(x,y) (x'*y + 1); ...
-    @(x,y) (x'*y + 0.5)^2; ...  % Polynomial
-    @(x,y) (x'*y + 0.5)^3; ...
-    @(x,y) (x'*y + 0.5)^4; ...
-    @(x,y) (x'*y + 1.0)^2; ...
-    @(x,y) (x'*y + 1.0)^3; ...
-    @(x,y) (x'*y + 1.0)^4; ...
-    @(x,y) (x'*y + 1.5)^2; ...
-    @(x,y) (x'*y + 1.5)^3; ...
-    @(x,y) (x'*y + 1.5)^4; ...
-    @(x,y) (x'*y + 2.0)^2; ...
-    @(x,y) (x'*y + 2.0)^3; ...
-    @(x,y) (x'*y + 2.0)^4; ...
-    @(x,y) (x'*y + 2.5)^2; ...
-    @(x,y) (x'*y + 2.5)^3; ...
-    @(x,y) (x'*y + 2.5)^4; ...
+    @(x,y) (x'*y + 0.5).^2; ...  % Polynomial
+    @(x,y) (x'*y + 0.5).^3; ...
+    @(x,y) (x'*y + 0.5).^4; ...
+    @(x,y) (x'*y + 1.0).^2; ...
+    @(x,y) (x'*y + 1.0).^3; ...
+    @(x,y) (x'*y + 1.0).^4; ...
+    @(x,y) (x'*y + 1.5).^2; ...
+    @(x,y) (x'*y + 1.5).^3; ...
+    @(x,y) (x'*y + 1.5).^4; ...
+    @(x,y) (x'*y + 2.0).^2; ...
+    @(x,y) (x'*y + 2.0).^3; ...
+    @(x,y) (x'*y + 2.0).^4; ...
+    @(x,y) (x'*y + 2.5).^2; ...
+    @(x,y) (x'*y + 2.5).^3; ...
+    @(x,y) (x'*y + 2.5).^4; ...
     @(x,y) tanh(0.1 + 1.0*(x'*y)); ...  % Hyperbolic Tangent
     @(x,y) tanh(0.2 + 1.0*(x'*y)); ...
     @(x,y) tanh(0.3 + 1.0*(x'*y)); ...
@@ -169,117 +128,149 @@ kappa  = { ...
     };
 %% Compute the M kernel matrices
 % Find K_m(Y, Y) for all M kernel functions
-kernel_mats = cell(length(kappa), 1);
-for m=1:length(kappa)
-    option.kernel = 'cust'; option.kernelfnc=kappa{m};
+kernel_mats = cell(length(kfncs), 1);
+for m=1:length(kfncs)
+    option.kernel = 'cust'; option.kernelfnc=kfncs{m};
     kernel_mats{m} = computeKernelMatrix(Dict,Dict,option);
 end
 
 % Make the ideal matrix - FIXME - assumes blocks of samples (probably fine)
 K_ideal = eye(size(Dict,2));
 % Find the number of samples in each class
-classes = unique(l);
+classes = unique(trainClassSmall);
 num_classes = numel(classes);
 masks = zeros(size(Dict,2),numel(classes));
 for i=1:num_classes
-    num_samples_per_class(i) = sum(l == classes(i));
-    masks(:,i) = l == classes(i);
-    locs = find(l == classes(i));
+    num_samples_per_class(i) = sum(trainClassSmall == classes(i));
+    masks(:,i) = trainClassSmall == classes(i);
+    locs = find(trainClassSmall == classes(i));
     K_ideal(min(locs):max(locs),min(locs):max(locs)) = 1;
 end
-%% Get ranked ordering of kernel matrices
-ranked_mats = kernel_mats;
-ranked_kappa = kappa;
-for i=1:length(ranked_mats)
+%% Get ranked ordering of kfncs based on similarity to ideal kernel
+for i=1:length(kfncs)
     alignment_scores(i) = kernelAlignment(kernel_mats{i}, K_ideal);
 end
 [sorted, idx] = sort(alignment_scores,'descend');
-ranked_mats_master = ranked_mats(idx,:);
-ranked_kappa_master = ranked_kappa(idx,:);
-
-ranked_mats = ranked_mats_master(1:13,:);
-ranked_kappa = ranked_kappa_master(1:13,:);
-% ranked_partial_mats = partial_kernel_mats(idx,:);
-%% Setup other parameters
-% overfitting_reg \mu
+kernel_mats = kernel_mats(idx);
+kfncs = kfncs(idx);
+%% Compute more kernel matrices
+for kidx=1:length(kfncs)
+    eta_temp = [];
+    eta_temp(kidx) = 1; % place a 1 in the current kernel
+    
+    Hfull{kidx,1}=computeMultiKernelMatrix(Dict,Dict,eta_temp,kfncs);
+    for sidx=1:length(validClassSmall)
+        Gfull{kidx,sidx}=computeMultiKernelMatrix(Dict,validSetSmall(:,sidx),eta_temp,kfncs);
+        Bfull{kidx,sidx}=computeMultiKernelMatrix(validSetSmall(:,sidx),validSetSmall(:,sidx),eta_temp,kfncs);
+    end
+end
+%% Generate eta
+eta = zeros(length(kfncs),1);
+eta(1)=1;
+%% Parameters
 mu = .02;
 % sparsity_reg \lambda
 lambda = .1;
 % max iterations
 T = 10;
 % error thresh for convergence
-err_thresh = .01;
+err_thresh = .1;
 err = err_thresh + 1;
 
-% total number of samples
-% N = num_samples;
-N = size(Y,2);
-%% Initalize kernel weights
-% Start by giving all weight to the most aligned kernel, i.e. ranked_mat{1}
-eta = zeros(length(ranked_mats),1);
-eta(1) = 1;
-%% Find initial sparse coefficients matrix X
-% For each ith training sample, 0 out the ith row
-% by solving (18) in the paper.
-% x_i = argmin_x (k(y_i, y_i)+ x^TK(Y_tilde, Y_tilde)x - 2K(y_i, Y_tilde)x - lambda||x_i||^1)
-% x=zeros(size(Y,2), numel(l));
-% for i=1:size(Y,2)
-%     x(:,i) = getCoeffs(x(:,i), Y(:,i), Dict, ranked_kappa, lambda, eta, 200, i);
-% end
-%% Iterate until quitting conditions are satisfied
-t=0;
-h = zeros(1, size(Dict,2));
-display("Beginning Processing...")
+optionKSRSC.lambda=lambda;
+% optionKSRSC.SCMethod='l1qpAS'; % can be nnqpAS, l1qpAS, nnqpIP, l1qpIP, l1qpPX, nnqpSMO, l1qpSMO
+optionKSRSC.iter=200;
+optionKSRSC.dis=0;
+optionKSRSC.residual=1e-4;
+optionKSRSC.tof=1e-4;
+%% Loop to get all sparse coeffs
+% Find the number of samples in each class
+classes = unique(trainClassSmall);
+num_classes = numel(classes);
+for i=1:num_classes
+    num_per_class(i) = sum(trainClassSmall == classes(i));
+end
+
+t = 0;
 while(t <= T && err>= err_thresh)
-    x=zeros(size(Dict,2), numel(l));
-    fprintf('Coeff progress:\n');
-    fprintf(['\n' repmat('.',1,N) '\n\n']);
-    parfor i=1:N
-        % Compute the sparse code x_i
-        x(:,i) = getCoeffs(x(:,i), Y(:,i), Dict, ranked_mats, ranked_kappa, lambda, eta, 500, i);
-        % Compute the predicted label h_i using x_i
-        h(i) = calcZis(x(:,i), Y(:,i), Dict, ranked_mats, ranked_kappa, eta, l, i, 0);
-        %         if (mod(i, 100)==0)
-        %             display(['Finished calcing coeffs for the ' num2str(i) 'th sample'])
-        %         end
-        fprintf('\b|\n');
-    end
+    t = t + 1;
     
-    % Precompute the predicted labels for each base kernel
-    g = zeros(length(ranked_kappa), N);
-    fprintf('Z progress:\n');
-    fprintf(['\n' repmat('.',1,length(ranked_kappa)) '\n\n']);
-    parfor ker_num=1:length(ranked_kappa)
-        for i=1:N
-            g(ker_num, i) = calcZis(x(:,i), Y(:,i), Dict, ranked_mats, ranked_kappa{ker_num}, 1, l, i, ker_num);
+    H=computeMultiKernelMatrixFromPrecomputed(Hfull,eta);
+    
+    textprogressbar('Training Coeff progress: ');
+    for idx = 1:size(validSetSmall, 2)
+        testSet = validSetSmall(:,idx);
+        testClass = validClassSmall(idx);
+        
+        % compute kernels
+        G=computeMultiKernelMatrixFromPrecomputed(Gfull(:, idx),eta);
+        B=computeMultiKernelMatrixFromPrecomputed(Bfull(:, idx),eta);
+        
+        % KSRSC sparse coding
+        X(:, idx)=KSRSC(H,G,diag(B),optionKSRSC);
+        %         sparsity(idx) = (numel(X(:,idx)) - sum(X(:,idx)>0) )/ numel(X(:,idx));
+        %         ssims(idx) = ssim(reshape(Dict*X(:,idx), 28, 28), reshape(validSetSmall(:,idx), 28, 28));
+        %         immses(idx) = immse(Dict*X(:,idx), validSetSmall(:,idx));
+        
+        % Find class - calculate h (class) and z (correct class)
+        classerr = zeros(1, num_classes);
+        for class=1:num_classes
+            b_idx = sum(num_per_class(1:class-1)) + 1;
+            e_idx = sum(num_per_class(1:class));
+            x_c = X(b_idx:e_idx ,idx);
+            kernel_c = H(b_idx:e_idx ,b_idx:e_idx);
+            partial_c = G(b_idx:e_idx)';
+            classerr(class) = B + x_c'*kernel_c*x_c - 2*partial_c*x_c;
         end
-        fprintf('\b|\n');
+        [~, h(idx)] = min(classerr);
+        h(idx) = h(idx) - 1;  % Adjust for indexing in matlab
+        z(idx) = (h(idx) == validClassSmall(idx));
+        
+        % Need to calculate the ability to classify for each individual kernel
+        for kidx=1:length(kfncs)
+            eta_temp = [];
+            eta_temp(kidx) = 1; % place a 1 in the current kernel
+            
+            H_temp = computeMultiKernelMatrixFromPrecomputed(Hfull, eta_temp);
+            G_temp = computeMultiKernelMatrixFromPrecomputed(Gfull(:, idx),eta_temp);
+            B_temp = computeMultiKernelMatrixFromPrecomputed(Bfull(:, idx),eta_temp);
+            
+            err_temp = zeros(1, num_classes);
+            for class=1:num_classes
+                b_idx = sum(num_per_class(1:class-1)) + 1;
+                e_idx = sum(num_per_class(1:class));
+                x_c = X(b_idx:e_idx ,idx);
+                kernel_c = H_temp(b_idx:e_idx ,b_idx:e_idx);
+                partial_c = G_temp(b_idx:e_idx)';
+                err_temp(class) = B_temp + x_c'*kernel_c*x_c - 2*partial_c*x_c;
+            end
+            [~, h_temp] = min(err_temp);
+            h_temp = h_temp - 1;  % Adjust for indexing in matlab
+            g(kidx, idx) = h_temp;
+            zm(kidx, idx) = g(kidx, idx) == validClassSmall(idx);
+            
+            if sum(1-z)
+                c(kidx,1) = sum(zm(kidx, find(z==0)))/sum(1-z);
+            else
+                c(kidx,1) = 0;
+            end
+        end
+        
+        textprogressbar(idx*100/size(validSetSmall, 2));
     end
     
-    z = (h == l);
-    % If we have perfect guesses then quit
-    if length(z)/sum(z) == 1
+    textprogressbar(' Done.');
+    
+    
+    % Calculate the C values
+    if sum(z)/length(z) == 1 | sum(c)==0
         err = 0;
     else
-        for m=1:length(ranked_kappa)
-            zm(m,:) = g(m,:) == l;
-            c(m,1) = sum(zm(m, find(z==0)))/sum(1-z);
-        end
-        % Update weights for all m
-        % find the best new kernel based on c
-        
-%                 [best_c_val,best_c_idx] = max(c(c ~=0 & eta == 0) );
-%                 best_c_val_og = best_c_val;
-%                 c_idxs = find(c~=0 & eta == 0);
-        
-        [best_c_val,best_c_idx] = max(c(c ~=0) ); % THIS WORKS
+        [best_c_val,best_c_idx] = max(c); % THIS WORKS
         best_c_val_og = best_c_val;
-        c_idxs = find(c~=0);
-        best_c_idx = c_idxs(best_c_idx);
-        update_c = 0;
+        update_c = 1;
         if update_c
             for i=best_c_idx:-1:1
-                %             if (c(i) ~=0 & eta == 0) & (c(i) + mu > best_c_val_og)
                 if (c(i) ~=0) & (c(i) + mu > best_c_val_og)  % THIS WORKS
                     best_c_idx = i;
                     best_c_val = c(i);
@@ -287,25 +278,12 @@ while(t <= T && err>= err_thresh)
                 end
             end
         end
-        
-        if isempty(best_c_idx)
-            display(['Cheating'])
-            new_kernel = randi(length(ranked_kappa),1);
-            % %             [~, new_kernel] = max(c);
-            %             new_kernel_weight = sum(bitand(zm(new_kernel,:), not(z)))/sum(bitor(not(z), not(zm(new_kernel,:))));
-            %             curr_kernel_weight = sum(bitand(z, not(zm(new_kernel,:))))/sum(bitor(not(z), not(zm(new_kernel,:))));
-            
-            new_kernel_weight = .1;
-            curr_kernel_weight = 1;
-        else
-            new_kernel = best_c_idx;
-            new_kernel_weight = sum(bitand(zm(new_kernel,:), not(z)))/sum(bitor(not(z), not(zm(new_kernel,:))));
-            curr_kernel_weight = sum(bitand(z, not(zm(new_kernel,:))))/sum(bitor(not(z), not(zm(new_kernel,:))));
-        end
-        
+        new_kernel = best_c_idx;
+        new_kernel_weight = sum(bitand(zm(new_kernel,:), not(z)))/sum(bitor(not(z), not(zm(new_kernel,:))));
+        curr_kernel_weight = sum(bitand(z, not(zm(new_kernel,:))))/sum(bitor(not(z), not(zm(new_kernel,:))));
         prev_eta = eta; % save for calcing error
         % Do the actual mixing weight update here
-        for m=1:length(ranked_kappa)
+        for m=1:length(kfncs)
             if m==new_kernel
                 eta(m)=new_kernel_weight;
             else
@@ -320,37 +298,56 @@ while(t <= T && err>= err_thresh)
         % set err = ||eta^{t-1}-eta^{t}||_2
         err = norm(prev_eta - eta,2);
     end
-    t = t + 1;
     display(['Iteration: ' num2str(t) '/' num2str(T) ' Accuracy: ' num2str(sum(z)/numel(z)) ' Error: ' num2str(err)])
-    curr_kernel = 0;
-    for lll=1:length(ranked_kappa)
-        curr_kernel = curr_kernel + eta(lll)*ranked_mats{lll};
+end
+%% Look at the recon errors
+errors = validSetSmall - Dict*X;
+errornorms = vecnorm(errors);
+
+%% Test the test set
+for kidx=1:length(kfncs)
+    eta_temp = [];
+    eta_temp(kidx) = 1; % place a 1 in the current kernel
+    
+    Hfulltest{kidx,1}=computeMultiKernelMatrix(Dict,Dict,eta_temp,kfncs);
+    for sidx=1:length(testClassSmall)
+        Gfulltest{kidx,sidx}=computeMultiKernelMatrix(Dict,testSetSmall(:,sidx),eta_temp,kfncs);
+        Bfulltest{kidx,sidx}=computeMultiKernelMatrix(testSetSmall(:,sidx),testSetSmall(:,sidx),eta_temp,kfncs);
     end
 end
-%% Some other calcs
-Yt = Dict*x;
-errors = Y-Yt;
-for i=1:size(errors,2)
-    error_norm(i) = norm(errors(:, i));
-end
-%% Classify some new points
-classify_ps = 1;
-if classify_ps
-    num_samples2 = numel(l2);
-    x2=zeros(size(Y,2), num_samples2);  % Must be the size of the kernel matrix
-    predictions = zeros(num_samples2, 1);
-    fprintf('Coeff progress:\n');
-    fprintf(['\n' repmat('.',1,num_samples2) '\n\n']);
-    parfor i=1:num_samples2
-        x2(:,i) = getCoeffs(x2(:,i), Y2(:,i), Dict, ranked_mats, ranked_kappa, lambda, eta, 50, 0);
-        % Pass in l instead of l2 because we need to know the ordering of
-        % classes in Dict
-        predictions(i, 1) = calcZis(x2(:,i), Y2(:,i), Dict, ranked_mats, ranked_kappa, eta, l, 0);
-        %         if (mod(i, 10)==0)
-        %             display(['Finished calcing coeffs for the ' num2str(i) 'th sample'])
-        %         end
-        fprintf('\b|\n');
+textprogressbar('Testing prediction progress: ');
+Htest=computeMultiKernelMatrixFromPrecomputed(Hfulltest,eta);
+for idx = 1:size(testSetSmall, 2)
+    testSet = testSetSmall(:,idx);
+    testClass = testClassSmall(idx);
+    
+    % compute kernels
+    Gtest=computeMultiKernelMatrixFromPrecomputed(Gfulltest(:, idx),eta);
+    Btest=computeMultiKernelMatrixFromPrecomputed(Bfulltest(:, idx),eta);
+    
+    % KSRSC sparse coding
+    Xtest(:, idx)=KSRSC(Htest,Gtest,diag(Btest),optionKSRSC);
+    %         sparsity(idx) = (numel(X(:,idx)) - sum(X(:,idx)>0) )/ numel(X(:,idx));
+    %         ssims(idx) = ssim(reshape(Dict*X(:,idx), 28, 28), reshape(validSetSmall(:,idx), 28, 28));
+    %         immses(idx) = immse(Dict*X(:,idx), validSetSmall(:,idx));
+    
+    % Find class - calculate h (class) and z (correct class)
+    classerr = zeros(1, num_classes);
+    for class=1:num_classes
+        b_idx = sum(num_per_class(1:class-1)) + 1;
+        e_idx = sum(num_per_class(1:class));
+        x_c = Xtest(b_idx:e_idx ,idx);
+        kernel_c = Htest(b_idx:e_idx ,b_idx:e_idx);
+        partial_c = Gtest(b_idx:e_idx)';
+        classerr(class) = Btest + x_c'*kernel_c*x_c - 2*partial_c*x_c;
     end
-    pred_mask = (predictions'==l2)';
-    display(['Predicted: ' num2str(100*sum(predictions'==l2)/numel(l2)) '%'])
+    [~, htest(idx)] = min(classerr);
+    htest(idx) = htest(idx) - 1;  % Adjust for indexing in matlab
+    ztest(idx) = (htest(idx) == testClassSmall(idx));
+    
+    textprogressbar(idx*100/size(testSetSmall, 2));
 end
+textprogressbar(' Done.');
+
+display(['Testing Accuracy: ' num2str(sum(ztest)/numel(ztest))])
+
