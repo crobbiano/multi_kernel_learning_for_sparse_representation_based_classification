@@ -6,17 +6,11 @@ if saveSet
     % load('data/smallRoundBlueCellTumorOFChildhood.mat');
     load('mnist_data.mat');
     Data = double(Data);
-    dataStr='SRBCT';
     D=Data;
     % clear('Data');
     
     % normalize D
     D=normc(D);
-    
-    
-    % reset the random number generator
-    s = RandStream('swb2712','Seed',1);
-    % RandStream.setDefaultStream(s);
     
     % CV
     kfold=5;
@@ -36,8 +30,8 @@ if saveSet
     testSet = testSet(:,idxs);
     
     % Get a set of digits 0-3 from the trainSet and 0-4 from the testSet
-    trainIdx = logical(sum(trainClass'==0:3, 2));
-    testIdx = logical(sum(testClass'==0:4, 2));
+    trainIdx = logical(sum(trainClass'==0:8, 2));
+    testIdx = logical(sum(testClass'==0:9, 2));
     
     savedTrainSet = trainSet(:,trainIdx);
     savedTrainClass = trainClass(trainIdx);
@@ -49,7 +43,7 @@ if saveSet
     trainClass = savedTrainClass;
     testSet = savedTestSet;
     testClass = savedTestClass;
-    kfold=192;
+    kfold=400;
     ind=crossvalind('Kfold',trainClass,kfold);
     indTrain=logical(sum(ind==1:16,2));
     indValid=logical(sum(ind==17:37,2));
@@ -65,9 +59,11 @@ if saveSet
     testClassSmall=testClass(indTest);
     testSetSmall=testSet(:,indTest);
     
-    save('mnist_train_0-3_test_0-4.mat', 'trainSet', 'trainClass', 'testSet', 'testClass', 'trainSetSmall', 'trainClassSmall', 'testSetSmall', 'testClassSmall', 'validSetSmall', 'validClassSmall')
+    save('mnist_train_0-8_test_0-9.mat', 'trainSet', 'trainClass', 'testSet', 'testClass', 'trainSetSmall', 'trainClassSmall', 'testSetSmall', 'testClassSmall', 'validSetSmall', 'validClassSmall')
 else
-    load('mnist_train_0-3_test_0-4.mat');
+    %     load('mnist_train_0-3_test_0-4.mat');
+        load('mnist_train_0-8_test_0-9.mat');
+%     load('caltech_train.mat');
 end
 %%
 % Save the dictionary
@@ -127,6 +123,7 @@ kfncs  = { ...
     @(x,y) exp((-(repmat(sum(x.^2,1)',1,size(y,2))-2*(x'*y)+repmat(sum(y.^2,1),size(x,2),1))/1.8)); ...
     };
 %% Compute the M kernel matrices
+display('Generating first set of matrices')
 % Find K_m(Y, Y) for all M kernel functions
 kernel_mats = cell(length(kfncs), 1);
 for m=1:length(kfncs)
@@ -147,6 +144,7 @@ for i=1:num_classes
     K_ideal(min(locs):max(locs),min(locs):max(locs)) = 1;
 end
 %% Get ranked ordering of kfncs based on similarity to ideal kernel
+display('Generating ranks of matrices')
 for i=1:length(kfncs)
     alignment_scores(i) = kernelAlignment(kernel_mats{i}, K_ideal);
 end
@@ -154,23 +152,30 @@ end
 kernel_mats = kernel_mats(idx);
 kfncs = kfncs(idx);
 %% Compute more kernel matrices
-for kidx=1:length(kfncs)
-    eta_temp = [];
-    eta_temp(kidx) = 1; % place a 1 in the current kernel
-    
-    Hfull{kidx,1}=computeMultiKernelMatrix(Dict,Dict,eta_temp,kfncs);
-    for sidx=1:length(validClassSmall)
-        Gfull{kidx,sidx}=computeMultiKernelMatrix(Dict,validSetSmall(:,sidx),eta_temp,kfncs);
-        Bfull{kidx,sidx}=computeMultiKernelMatrix(validSetSmall(:,sidx),validSetSmall(:,sidx),eta_temp,kfncs);
+if iscell(Hfull) == 0
+    textprogressbar('Generating second set of matrices');
+    for kidx=1:length(kfncs)
+        eta_temp = [];
+        eta_temp(kidx) = 1; % place a 1 in the current kernel
+        
+        Hfull{kidx,1}=computeMultiKernelMatrix(Dict,Dict,eta_temp,kfncs);
+        for sidx=1:length(validClassSmall)
+            Gfull{kidx,sidx}=computeMultiKernelMatrix(Dict,validSetSmall(:,sidx),eta_temp,kfncs);
+            Bfull{kidx,sidx}=computeMultiKernelMatrix(validSetSmall(:,sidx),validSetSmall(:,sidx),eta_temp,kfncs);
+        end
+        
+        textprogressbar(kidx*100/length(kfncs));
     end
+    textprogressbar(' Done.');
 end
+
 %% Generate eta
 eta = zeros(length(kfncs),1);
 eta(1)=1;
 %% Parameters
 mu = .02;
 % sparsity_reg \lambda
-lambda = .1;
+lambda = .01;
 % max iterations
 T = 10;
 % error thresh for convergence
@@ -208,9 +213,9 @@ while(t <= T && err>= err_thresh)
         
         % KSRSC sparse coding
         X(:, idx)=KSRSC(H,G,diag(B),optionKSRSC);
-        %         sparsity(idx) = (numel(X(:,idx)) - sum(X(:,idx)>0) )/ numel(X(:,idx));
-        %         ssims(idx) = ssim(reshape(Dict*X(:,idx), 28, 28), reshape(validSetSmall(:,idx), 28, 28));
-        %         immses(idx) = immse(Dict*X(:,idx), validSetSmall(:,idx));
+        sparsity(idx) = (numel(X(:,idx)) - sum(X(:,idx)>0) )/ numel(X(:,idx));
+%         ssims(idx) = ssim(reshape(Dict*X(:,idx), 28, 28), reshape(validSetSmall(:,idx), 28, 28));
+        immses(idx) = immse(Dict*X(:,idx), validSetSmall(:,idx));
         
         % Find class - calculate h (class) and z (correct class)
         classerr = zeros(1, num_classes);
@@ -305,6 +310,7 @@ errors = validSetSmall - Dict*X;
 errornorms = vecnorm(errors);
 
 %% Test the test set
+display('Generating testing matrices...')
 for kidx=1:length(kfncs)
     eta_temp = [];
     eta_temp(kidx) = 1; % place a 1 in the current kernel
@@ -327,9 +333,9 @@ for idx = 1:size(testSetSmall, 2)
     
     % KSRSC sparse coding
     Xtest(:, idx)=KSRSC(Htest,Gtest,diag(Btest),optionKSRSC);
-    %         sparsity(idx) = (numel(X(:,idx)) - sum(X(:,idx)>0) )/ numel(X(:,idx));
-    %         ssims(idx) = ssim(reshape(Dict*X(:,idx), 28, 28), reshape(validSetSmall(:,idx), 28, 28));
-    %         immses(idx) = immse(Dict*X(:,idx), validSetSmall(:,idx));
+    sparsitytest(idx) = (numel(Xtest(:,idx)) - sum(Xtest(:,idx)>0) )/ numel(Xtest(:,idx));
+%     ssimstest(idx) = ssim(reshape(Dict*Xtest(:,idx), 28, 28), reshape(testSetSmall(:,idx), 28, 28));
+    immsestest(idx) = immse(Dict*Xtest(:,idx), testSetSmall(:,idx));
     
     % Find class - calculate h (class) and z (correct class)
     classerr = zeros(1, num_classes);
