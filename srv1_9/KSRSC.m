@@ -62,6 +62,7 @@ function [X,tElapsed,sparsity]=KSRSC(AtA,AtB,BtB,option)
 tStart=tic;
 optionDefault.lambda=0.1;
 optionDefault.SCMethod='nnlsAS';
+% optionDefault.SCMethod='l1lsAS';
 optionDefault.iter=200;
 optionDefault.dis=0;
 optionDefault.residual=1e-4;
