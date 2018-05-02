@@ -123,12 +123,13 @@ kfncs  = { ...
     @(x,y) exp((-(repmat(sum(x.^2,1)',1,size(y,2))-2*(x'*y)+repmat(sum(y.^2,1),size(x,2),1))/1.8)); ...
     };
 %% Compute the M kernel matrices
-display('Generating first set of matrices')
+textprogressbar('Generating first set of matrices: ')
 % Find K_m(Y, Y) for all M kernel functions
 kernel_mats = cell(length(kfncs), 1);
 for m=1:length(kfncs)
     option.kernel = 'cust'; option.kernelfnc=kfncs{m};
     kernel_mats{m} = computeKernelMatrix(Dict,Dict,option);
+    textprogressbar(m*100/length(kfncs));
 end
 
 % Make the ideal matrix - FIXME - assumes blocks of samples (probably fine)
@@ -143,17 +144,20 @@ for i=1:num_classes
     locs = find(trainClassSmall == classes(i));
     K_ideal(min(locs):max(locs),min(locs):max(locs)) = 1;
 end
+textprogressbar(' Done.');
 %% Get ranked ordering of kfncs based on similarity to ideal kernel
-display('Generating ranks of matrices')
+textprogressbar('Generating ranks of matrices: ')
 for i=1:length(kfncs)
     alignment_scores(i) = kernelAlignment(kernel_mats{i}, K_ideal);
+    textprogressbar(i*100/length(kfncs));
 end
 [sorted, idx] = sort(alignment_scores,'descend');
 kernel_mats = kernel_mats(idx);
 kfncs = kfncs(idx);
+textprogressbar(' Done.');
 %% Compute more kernel matrices
-if iscell(Hfull) == 0
-    textprogressbar('Generating second set of matrices');
+% if iscell(Hfull) == 0
+    textprogressbar('Generating second set of matrices: ');
     for kidx=1:length(kfncs)
         eta_temp = [];
         eta_temp(kidx) = 1; % place a 1 in the current kernel
@@ -167,7 +171,7 @@ if iscell(Hfull) == 0
         textprogressbar(kidx*100/length(kfncs));
     end
     textprogressbar(' Done.');
-end
+% end
 
 %% Generate eta
 eta = zeros(length(kfncs),1);
@@ -212,8 +216,9 @@ while(t <= T && err>= err_thresh)
         B=computeMultiKernelMatrixFromPrecomputed(Bfull(:, idx),eta);
         
         % KSRSC sparse coding
-        X(:, idx)=KSRSC(H,G,diag(B),optionKSRSC);
-        sparsity(idx) = (numel(X(:,idx)) - sum(X(:,idx)>0) )/ numel(X(:,idx));
+        [X(:, idx), ~, sparsity(idx)] =KSRSC(H,G,diag(B),optionKSRSC);
+        Xtemp(:,idx) = OMP(H, G, 5, 0);
+%         sparsity(idx) = (numel(X(:,idx)) - sum(X(:,idx)>0) )/ numel(X(:,idx));
 %         ssims(idx) = ssim(reshape(Dict*X(:,idx), 28, 28), reshape(validSetSmall(:,idx), 28, 28));
         immses(idx) = immse(Dict*X(:,idx), validSetSmall(:,idx));
         
@@ -310,7 +315,7 @@ errors = validSetSmall - Dict*X;
 errornorms = vecnorm(errors);
 
 %% Test the test set
-display('Generating testing matrices...')
+textprogressbar('Generating testing matrices: ')
 for kidx=1:length(kfncs)
     eta_temp = [];
     eta_temp(kidx) = 1; % place a 1 in the current kernel
@@ -320,7 +325,9 @@ for kidx=1:length(kfncs)
         Gfulltest{kidx,sidx}=computeMultiKernelMatrix(Dict,testSetSmall(:,sidx),eta_temp,kfncs);
         Bfulltest{kidx,sidx}=computeMultiKernelMatrix(testSetSmall(:,sidx),testSetSmall(:,sidx),eta_temp,kfncs);
     end
+    textprogressbar(kidx*100/length(kfncs));
 end
+textprogressbar(' Done.');
 textprogressbar('Testing prediction progress: ');
 Htest=computeMultiKernelMatrixFromPrecomputed(Hfulltest,eta);
 for idx = 1:size(testSetSmall, 2)
@@ -332,10 +339,11 @@ for idx = 1:size(testSetSmall, 2)
     Btest=computeMultiKernelMatrixFromPrecomputed(Bfulltest(:, idx),eta);
     
     % KSRSC sparse coding
-    Xtest(:, idx)=KSRSC(Htest,Gtest,diag(Btest),optionKSRSC);
-    sparsitytest(idx) = (numel(Xtest(:,idx)) - sum(Xtest(:,idx)>0) )/ numel(Xtest(:,idx));
-%     ssimstest(idx) = ssim(reshape(Dict*Xtest(:,idx), 28, 28), reshape(testSetSmall(:,idx), 28, 28));
-    immsestest(idx) = immse(Dict*Xtest(:,idx), testSetSmall(:,idx));
+    [Xtest(:, idx), ~, sparsitytest(idx)] =KSRSC(Htest,Gtest,diag(Btest),optionKSRSC);
+    Xtemptest(:,idx) = OMP(Htest, Gtest, 100, .01);
+%     sparsitytest(idx) = (numel(Xtest(:,idx)) - sum(Xtest(:,idx)>0) )/ numel(Xtest(:,idx));
+    ssimstest(idx) = ssim(reshape(Dict*Xtemptest(:,idx), 28, 28), reshape(testSetSmall(:,idx), 28, 28));
+    immsestest(idx) = immse(Dict*Xtemptest(:,idx), testSetSmall(:,idx));
     
     % Find class - calculate h (class) and z (correct class)
     classerr = zeros(1, num_classes);
@@ -357,3 +365,14 @@ textprogressbar(' Done.');
 
 display(['Testing Accuracy: ' num2str(sum(ztest)/numel(ztest))])
 
+%% Get just the top K largest coeffs in the Xtest for analysis
+Xtestsparse = Xtemptest;
+% K=3;
+% totalnums = 1:length(Xtestsparse(:,1));
+% for i=1:size(Xtestsparse,2)
+%     [~, maxes]=maxk(Xtestsparse(:,i), K);
+%     Xtestsparse(setdiff(totalnums, maxes),i) = 0;
+% end
+recons = Dict*Xtestsparse;
+recon_errors = testSetSmall - recons;
+errors = vecnorm(recon_errors);
