@@ -63,7 +63,7 @@ if saveSet
 else
     %     load('mnist_train_0-3_test_0-4.mat');
         load('mnist_train_0-8_test_0-9.mat');
-%     load('caltech_train.mat');
+%     load('caltech_35_train.mat');
 end
 %%
 % Save the dictionary
@@ -172,18 +172,17 @@ textprogressbar(' Done.');
     end
     textprogressbar(' Done.');
 % end
-
 %% Generate eta
 eta = zeros(length(kfncs),1);
 eta(1)=1;
 %% Parameters
 mu = .02;
 % sparsity_reg \lambda
-lambda = .01;
+lambda = .1;
 % max iterations
-T = 10;
+T = 20;
 % error thresh for convergence
-err_thresh = .1;
+err_thresh = .001;
 err = err_thresh + 1;
 
 optionKSRSC.lambda=lambda;
@@ -216,8 +215,9 @@ while(t <= T && err>= err_thresh)
         B=computeMultiKernelMatrixFromPrecomputed(Bfull(:, idx),eta);
         
         % KSRSC sparse coding
-        [X(:, idx), ~, sparsity(idx)] =KSRSC(H,G,diag(B),optionKSRSC);
-        Xtemp(:,idx) = OMP(H, G, 5, 0);
+%         [X(:, idx), ~, sparsity(idx)] =KSRSC(H,G,diag(B),optionKSRSC);
+        Xtemp(:,idx) = OMP(H, G, 15, 0);
+        X(:, idx) = Xtemp(:, idx);
 %         sparsity(idx) = (numel(X(:,idx)) - sum(X(:,idx)>0) )/ numel(X(:,idx));
 %         ssims(idx) = ssim(reshape(Dict*X(:,idx), 28, 28), reshape(validSetSmall(:,idx), 28, 28));
         immses(idx) = immse(Dict*X(:,idx), validSetSmall(:,idx));
@@ -313,7 +313,6 @@ end
 %% Look at the recon errors
 errors = validSetSmall - Dict*X;
 errornorms = vecnorm(errors);
-
 %% Test the test set
 textprogressbar('Generating testing matrices: ')
 for kidx=1:length(kfncs)
@@ -339,10 +338,11 @@ for idx = 1:size(testSetSmall, 2)
     Btest=computeMultiKernelMatrixFromPrecomputed(Bfulltest(:, idx),eta);
     
     % KSRSC sparse coding
-    [Xtest(:, idx), ~, sparsitytest(idx)] =KSRSC(Htest,Gtest,diag(Btest),optionKSRSC);
-    Xtemptest(:,idx) = OMP(Htest, Gtest, 100, .01);
+%     [Xtest(:, idx), ~, sparsitytest(idx)] =KSRSC(Htest,Gtest,diag(Btest),optionKSRSC);
+    Xtemptest(:,idx) = OMP(Htest, Gtest, 15, 0);
+    Xtest(:,idx) = Xtemptest(:,idx);
 %     sparsitytest(idx) = (numel(Xtest(:,idx)) - sum(Xtest(:,idx)>0) )/ numel(Xtest(:,idx));
-    ssimstest(idx) = ssim(reshape(Dict*Xtemptest(:,idx), 28, 28), reshape(testSetSmall(:,idx), 28, 28));
+%     ssimstest(idx) = ssim(reshape(Dict*Xtemptest(:,idx), 28, 28), reshape(testSetSmall(:,idx), 28, 28));
     immsestest(idx) = immse(Dict*Xtemptest(:,idx), testSetSmall(:,idx));
     
     % Find class - calculate h (class) and z (correct class)

@@ -2,67 +2,89 @@ clear all
 clc
 close all
 %%
+load('spatialpyramidfeatures4caltech101/spatialpyramidfeatures4caltech101.mat')
+allClass = bin102num(labelMat);
+allSet = featureMat;
 
-useCaltech = 1;
-if useCaltech
-    imgsz = 144;
+%%
+
+fraction = 0.;
+
+classes = unique(allClass);
+nObs = length(allClass);
+nClasses = length(classes);
+nSamples = round(nObs * fraction / nClasses);
+nSamples = 31;
+
+for ii = 1:nClasses
+    idx = allClass == classes(ii);
+    idxs((ii-1)*nSamples+1:ii*nSamples) = randsample(allClass(idx), nSamples);
     
-    imds = imageDatastore('101_ObjectCategories', 'IncludeSubfolders',true,'LabelSource','foldernames');
-    numTrainFiles = 15;
-    [imdsTrain,imdsTest] = splitEachLabel(imds,numTrainFiles,'randomize');
     
-    trainClasstxt = imdsTrain.Labels;
-    trainClass = grp2idx(trainClasstxt);
-    trainClass = trainClass';
-    for i=1:length(imdsTrain.Files)
-        im = imread(imdsTrain.Files{i});
-        if size(im, 3) > 1
-            im = rgb2gray(im);
-        end
-        %         figure(1); imshow(im,[])
-        im = imresize(im, [imgsz imgsz]);
-        %         figure(2); imshow(double(im),[])
-        trainSet(:,i) = reshape(double(im), imgsz*imgsz, 1);
-        %         figure(3); imshow(reshape(Y(:,i), 128, 128),[])
-    end
-    
-    testClasstxt = imdsTest.Labels;
-    testClass = grp2idx(testClasstxt);
-    testClass = testClass';
-    for i=1:length(imdsTest.Files)
-        im = imread(imdsTest.Files{i});
-        if size(im, 3) > 1
-            im = rgb2gray(im);
-        end
-        im = imresize(im, [imgsz imgsz]);
-        testSet(:,i) = reshape(double(im), imgsz*imgsz, 1);
-    end
-    
-    [~, idxs] = sort(trainClass);
-    trainClass = trainClass(idxs);
-    trainSet = trainSet(:,idxs);
-    trainSet = normc(trainSet);
-    [~, idxs] = sort(testClass);
-    testClass = testClass(idxs);
-    testSet = testSet(:,idxs);
-    testSet = normc(testSet);
-    
-    kfold=5;
-    ind=crossvalind('Kfold',trainClass,kfold);
-    indSmall=logical(sum(ind==1:3,2));
-    trainClassSmall=trainClass(indSmall);
-    trainSetSmall=trainSet(:,indSmall);
-    
-    kfold=20;
-    ind=crossvalind('Kfold',testClass,kfold);
-    indSmall=logical(sum(ind==1:3,2));
-    indValid=logical(sum(ind==4:5,2));
-    testClassSmall=testClass(indSmall);
-    testSetSmall=testSet(:,indSmall);
-    validClassSmall=testClass(indValid);
-    validSetSmall=testSet(:,indValid);
-    
+    sampleidx = find(allClass == classes(ii));
+    indTrain((ii-1)*nSamples+1:ii*nSamples) = randsample(sampleidx, nSamples);
+end
+
+numtotalvec = 1:length(allClass);
+remainingindices = setdiff(numtotalvec, indTrain);
+indTrainSmall = indTrain;
+
+trainClass = allClass(indTrain);
+trainSet=allSet(:,indTrain);
+trainClassSmall=allClass(indTrainSmall);
+trainSetSmall=allSet(:,indTrainSmall);
+
+allClass = allClass(remainingindices);
+allSet = allSet(:,remainingindices);
+%%
+
+kfold=30; % Number of classes.
+ind=crossvalind('Kfold',allClass,kfold);
+% indTrain=logical(sum(ind==1:5,2));
+% indTrainSmall=logical(sum(ind==1,2));
+
+indValid=logical(sum(ind==1:15,2));
+indValidSmall=logical(sum(ind==6:7,2));
+
+indTest=logical(sum(ind==16:30,2));
+indTestSmall=logical(sum(ind==18:19,2));
+
+testClass = allClass(indTest);
+testSet=allSet(:,indTest);
+testClassSmall=allClass(indTestSmall);
+testSetSmall=allSet(:,indTestSmall);
+
+validClass = allClass(indValid);
+validSet=allSet(:,indValid);
+validSetSmall=allSet(:,indValidSmall);
+validClassSmall=allClass(indValidSmall);
+
+%% Pick just 5 classes
+pick5 = 1;
+if pick5
+    classes = [1 2 3 4 5];
+    indTrain = find(sum(trainClass'==classes,2));
+    indTrainSmall = indTrain;
+    trainClassSmall = trainClass(indTrainSmall);
+    trainClass = trainClass(indTrain);
+    trainSetSmall = trainSet(:,indTrainSmall);
+    trainSet = trainSet(:,indTrain);
+
+    indTest = find(sum(testClass'==classes,2));
+    indTestSmall = indTest;
+    testClassSmall = testClass(indTestSmall);
+    testClass = testClass(indTest);
+    testSetSmall = testSet(:,indTestSmall);
+    testSet = testSet(:,indTest);
+
+    indValid = find(sum(validClass'==classes,2));
+    indValidSmall = indValid;
+    validClassSmall = validClass(indValidSmall);
+    validClass = validClass(indValid);
+    validSetSmall = validSet(:,indValidSmall);
+    validSet = validSet(:,indValid);
+
 end
 
 %%
-save('caltech_train.mat', 'trainSet', 'trainClass', 'testSet', 'testClass', 'trainSetSmall', 'trainClassSmall', 'testSetSmall', 'testClassSmall', 'validSetSmall', 'validClassSmall')
+save('caltech_35_train.mat', 'trainSet', 'trainClass', 'testSet', 'testClass', 'trainSetSmall', 'trainClassSmall', 'testSetSmall', 'testClassSmall', 'validSet', 'validClass', 'validSetSmall', 'validClassSmall')
