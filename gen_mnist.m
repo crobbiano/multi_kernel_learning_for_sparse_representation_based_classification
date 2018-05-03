@@ -37,16 +37,16 @@ allSet = allSet(:,remainingindices);
 kfold=140; % Number of classes.
 ind=crossvalind('Kfold',allClass,kfold);
 indTrain=logical(sum(ind==31:41,2));
-indTrainSmall=logical(sum(ind==1,2));
-indTrainSmall=indTrain;
+indTrainSmall=logical(sum(ind==31:33,2));
+% indTrainSmall=indTrain;
 
 indValid=logical(sum(ind==1:15,2));
 indValidSmall=logical(sum(ind==6:7,2));
-indValidSmall=indValid;
+% indValidSmall=indValid;
 
 indTest=logical(sum(ind==16:30,2));
 indTestSmall=logical(sum(ind==18:19,2));
-indTestSmall=indTest;
+% indTestSmall=indTest;
 
 trainClass = allClass(indTrain);
 trainSet=allSet(:,indTrain);
@@ -80,20 +80,20 @@ if someDigits
     dictClassSmall = dictClass(dictIdxSmall);
     dictSetSmall   = dictSet(:,dictIdxSmall);
     
-    trainClass      = allClass(trainIdx);
-    trainSet        = allSet(:,trainIdx);
-    trainClassSmall = allClass(trainIdxSmall);
-    trainSetSmall   = allSet(:,trainIdxSmall);
+    trainClass      = trainClass(trainIdx);
+    trainSet        = trainSet(:,trainIdx);
+    trainClassSmall = trainClassSmall(trainIdxSmall);
+    trainSetSmall   = trainSetSmall(:,trainIdxSmall);
     
-    testClass      = allClass(testIdx);
-    testSet        = allSet(:,testIdx);
-    testClassSmall = allClass(testIdxSmall);
-    testSetSmall   = allSet(:,testIdxSmall);
+    testClass      = testClass(testIdx);
+    testSet        = testSet(:,testIdx);
+    testClassSmall = testClassSmall(testIdxSmall);
+    testSetSmall   = testSetSmall(:,testIdxSmall);
     
-    validClass      = allClass(validIdx);
-    validSet        = allSet(:,validIdx);
-    validSetSmall   = allSet(:,validIdxSmall);
-    validClassSmall = allClass(validIdxSmall);
+    validClass      = validClass(validIdx);
+    validSet        = validSet(:,validIdx);
+    validSetSmall   = validSetSmall(:,validIdxSmall);
+    validClassSmall = validClassSmall(validIdxSmall);
 end
 
 %%
