@@ -11,7 +11,7 @@ allSet = normc(allSet);
 classes = unique(allClass);
 nObs = length(allClass);
 nClasses = length(classes);
-nSamples = 25;
+nSamples = 100;
 
 for ii = 1:nClasses
     idx = allClass == classes(ii);
@@ -66,14 +66,14 @@ validClassSmall=allClass(indValidSmall);
 %% Get only certain digits
 someDigits = 1;
 if someDigits
-    dictIdx       = logical(sum(dictClass'       == 0:3, 2));
-    dictIdxSmall  = logical(sum(dictClassSmall'  == 0:3, 2));
-    trainIdx      = logical(sum(trainClass'      == 0:3, 2));
-    trainIdxSmall = logical(sum(trainClassSmall' == 0:3, 2));
-    testIdx       = logical(sum(testClass'       == 0:4, 2));
-    testIdxSmall  = logical(sum(testClassSmall'  == 0:4, 2));
-    validIdx      = logical(sum(validClass'      == 0:4, 2));
-    validIdxSmall = logical(sum(validClassSmall' == 0:4, 2));
+    dictIdx       = logical(sum(dictClass'       == 0:7, 2));
+    dictIdxSmall  = logical(sum(dictClassSmall'  == 0:7, 2));
+    trainIdx      = logical(sum(trainClass'      == 0:7, 2));
+    trainIdxSmall = logical(sum(trainClassSmall' == 0:7, 2));
+    testIdx       = logical(sum(testClass'       == 0:7, 2));
+    testIdxSmall  = logical(sum(testClassSmall'  == 0:7, 2));
+    validIdx      = logical(sum(validClass'      == 0:7, 2));
+    validIdxSmall = logical(sum(validClassSmall' == 0:7, 2));
     
     dictClass      = dictClass(dictIdx);
     dictSet        = dictSet(:,dictIdx);
@@ -97,7 +97,7 @@ if someDigits
 end
 
 %%
-save('mnist_insitu_0-3_0-4.mat', 'dictClass', 'dictClassSmall', 'dictSet', ...
+save('mnist_insitu_0-7_0-7.mat', 'dictClass', 'dictClassSmall', 'dictSet', ...
     'dictSetSmall', 'trainSet', 'trainClass', 'testSet', 'testClass',...
     'trainSetSmall', 'trainClassSmall', 'testSetSmall', 'testClassSmall',...
     'validSet', 'validClass', 'validSetSmall', 'validClassSmall')

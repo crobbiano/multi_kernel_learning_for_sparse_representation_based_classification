@@ -1,4 +1,4 @@
-function [X, h, g, z, zm, c] = mklsrcUpdate(Hfull, Gfull, Bfull, eta, trainClassSmall, num_classes, num_per_class)
+function [X, h, g, z, zm, c] = mklsrcUpdate(Hfull, Gfull, Bfull, eta, trainClassSmall, classes, num_per_class)
 %mklsrcUpdate Do an update for MKL-SRC
 %   Detailed explanation goes here
 
@@ -18,13 +18,12 @@ for idx = 1:length(trainClassSmall)
     B=computeMultiKernelMatrixFromPrecomputed(Bfull(:, idx),eta);
     
     % KSRSC sparse coding
-    [X(:, idx), ~, ~] =KSRSC(H,G,diag(B),optionKSRSC);
-    %     Xtemp(:,idx) = OMP(H, G, 50, 0);
-    %         X(:, idx) = Xtemp(:, idx);
+        [X(:, idx), ~, ~] =KSRSC(H,G,diag(B),optionKSRSC);
+%     X(:,idx) = OMP(H, G, 15, 0);
     
     % Find class - calculate h (class) and z (correct class)
-    classerr = zeros(1, num_classes);
-    for class=1:num_classes
+    classerr = zeros(1, length(classes));
+    for class=1:length(classes)
         b_idx = sum(num_per_class(1:class-1)) + 1;
         e_idx = sum(num_per_class(1:class));
         x_c = X(b_idx:e_idx ,idx);
@@ -33,7 +32,7 @@ for idx = 1:length(trainClassSmall)
         classerr(class) = B + x_c'*kernel_c*x_c - 2*partial_c*x_c;
     end
     [~, h(idx)] = min(classerr);
-    h(idx) = h(idx) - 1;  % Adjust for indexing in matlab
+    h(idx)=classes(h(idx));
     z(idx) = (h(idx) == trainClassSmall(idx));
     
     % Need to calculate the ability to classify for each individual kernel
@@ -45,8 +44,8 @@ for idx = 1:length(trainClassSmall)
         G_temp = computeMultiKernelMatrixFromPrecomputed(Gfull(:, idx),eta_temp);
         B_temp = computeMultiKernelMatrixFromPrecomputed(Bfull(:, idx),eta_temp);
         
-        err_temp = zeros(1, num_classes);
-        for class=1:num_classes
+        err_temp = zeros(1, length(classes));
+        for class=1:length(classes)
             b_idx = sum(num_per_class(1:class-1)) + 1;
             e_idx = sum(num_per_class(1:class));
             x_c = X(b_idx:e_idx ,idx);
@@ -55,7 +54,7 @@ for idx = 1:length(trainClassSmall)
             err_temp(class) = B_temp + x_c'*kernel_c*x_c - 2*partial_c*x_c;
         end
         [~, h_temp] = min(err_temp);
-        h_temp = h_temp - 1;  % Adjust for indexing in matlab
+        h_temp = classes(h_temp);
         g(kidx, idx) = h_temp;
         zm(kidx, idx) = g(kidx, idx) == trainClassSmall(idx);
         
@@ -69,6 +68,6 @@ for idx = 1:length(trainClassSmall)
     textprogressbar(idx*100/length(trainClassSmall));
 end
 
-textprogressbar(' Done.');
+textprogressbar(' ');
 end
 

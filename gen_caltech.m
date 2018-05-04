@@ -14,7 +14,7 @@ classes = unique(allClass);
 nObs = length(allClass);
 nClasses = length(classes);
 nSamples = round(nObs * fraction / nClasses);
-nSamples = 31;
+nSamples = 10;
 
 for ii = 1:nClasses
     idx = allClass == classes(ii);
@@ -22,17 +22,17 @@ for ii = 1:nClasses
     
     
     sampleidx = find(allClass == classes(ii));
-    indTrain((ii-1)*nSamples+1:ii*nSamples) = randsample(sampleidx, nSamples);
+    indDict((ii-1)*nSamples+1:ii*nSamples) = randsample(sampleidx, nSamples);
 end
 
 numtotalvec = 1:length(allClass);
-remainingindices = setdiff(numtotalvec, indTrain);
-indTrainSmall = indTrain;
+remainingindices = setdiff(numtotalvec, indDict);
+indDictSmall = indDict;
 
-trainClass = allClass(indTrain);
-trainSet=allSet(:,indTrain);
-trainClassSmall=allClass(indTrainSmall);
-trainSetSmall=allSet(:,indTrainSmall);
+dictClass = allClass(indDict);
+dictSet=allSet(:,indDict);
+dictClassSmall=allClass(indDictSmall);
+dictSetSmall=allSet(:,indDictSmall);
 
 allClass = allClass(remainingindices);
 allSet = allSet(:,remainingindices);
@@ -40,14 +40,19 @@ allSet = allSet(:,remainingindices);
 
 kfold=30; % Number of classes.
 ind=crossvalind('Kfold',allClass,kfold);
-% indTrain=logical(sum(ind==1:5,2));
-% indTrainSmall=logical(sum(ind==1,2));
+indTrain=logical(sum(ind==1:5,2));
+indTrainSmall=logical(sum(ind==1:2,2));
 
-indValid=logical(sum(ind==1:15,2));
+indValid=logical(sum(ind==6:15,2));
 indValidSmall=logical(sum(ind==6:7,2));
 
 indTest=logical(sum(ind==16:30,2));
 indTestSmall=logical(sum(ind==18:19,2));
+
+trainClass = allClass(indTrain);
+trainSet=allSet(:,indTrain);
+trainClassSmall=allClass(indTrainSmall);
+trainSetSmall=allSet(:,indTrainSmall);
 
 testClass = allClass(indTest);
 testSet=allSet(:,indTest);
@@ -63,6 +68,14 @@ validClassSmall=allClass(indValidSmall);
 pick5 = 1;
 if pick5
     classes = [1 2 3 4 5];
+    
+    indDict = find(sum(dictClass'==classes,2));
+    indDictSmall = indDict;
+    dictClassSmall = dictClass(indDictSmall);
+    dictClass = dictClass(indDict);
+    dictSetSmall = dictSet(:,indDictSmall);
+    dictSet = dictSet(:,indDict);
+    
     indTrain = find(sum(trainClass'==classes,2));
     indTrainSmall = indTrain;
     trainClassSmall = trainClass(indTrainSmall);
@@ -87,4 +100,4 @@ if pick5
 end
 
 %%
-save('caltech_35_train.mat', 'trainSet', 'trainClass', 'testSet', 'testClass', 'trainSetSmall', 'trainClassSmall', 'testSetSmall', 'testClassSmall', 'validSet', 'validClass', 'validSetSmall', 'validClassSmall')
+save('caltech_15_train.mat', 'dictSet','dictSetSmall', 'dictClass', 'dictClassSmall', 'trainSet', 'trainClass', 'testSet', 'testClass', 'trainSetSmall', 'trainClassSmall', 'testSetSmall', 'testClassSmall', 'validSet', 'validClass', 'validSetSmall', 'validClassSmall')

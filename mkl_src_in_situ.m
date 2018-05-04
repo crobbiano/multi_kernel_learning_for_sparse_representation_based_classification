@@ -1,10 +1,17 @@
 clc
 clear
 addpath(genpath('srv1_9'));
-load('mnist_insitu_0-3_0-4.mat')
+load('mnist_insitu_0-7_0-7.mat')
+% load('caltech_15_train.mat')
 %%
 % Save the dictionary
 Dict = dictSetSmall;
+
+% FIXME - subbing in big sets
+% testSetSmall = testSet;
+% testClassSmall = testClass;
+% validSetSmall = validSet;
+% validClassSmall = validClass;
 
 % FIXME - X should be N by M where N is number of atoms and M is number of
 % testing samples. Happens that M == N
@@ -78,7 +85,7 @@ for i=1:num_classes
     locs = find(dictClassSmall == classes(i));
     K_ideal(min(locs):max(locs),min(locs):max(locs)) = 1;
 end
-textprogressbar(' Done.');
+textprogressbar(' ');
 %% Get ranked ordering of kfncs based on similarity to ideal kernel
 textprogressbar('Generating ranks of matrices: ')
 for i=1:length(kfncs)
@@ -88,23 +95,23 @@ end
 [sorted, idx] = sort(alignment_scores,'descend');
 kernel_mats = kernel_mats(idx);
 kfncs = kfncs(idx);
-textprogressbar(' Done.');
+textprogressbar(' ');
 %% Compute more kernel matrices
 % if iscell(Hfull) == 0
-    textprogressbar('Generating second set of matrices: ');
-    for kidx=1:length(kfncs)
-        eta_temp = [];
-        eta_temp(kidx) = 1; % place a 1 in the current kernel
-        
-        Hfull{kidx,1}=computeMultiKernelMatrix(Dict,Dict,eta_temp,kfncs);
-        for sidx=1:length(trainClassSmall)
-            Gfull{kidx,sidx}=computeMultiKernelMatrix(Dict,trainSetSmall(:,sidx),eta_temp,kfncs);
-            Bfull{kidx,sidx}=computeMultiKernelMatrix(trainSetSmall(:,sidx),trainSetSmall(:,sidx),eta_temp,kfncs);
-        end
-        
-        textprogressbar(kidx*100/length(kfncs));
+textprogressbar('Generating second set of matrices: ');
+for kidx=1:length(kfncs)
+    eta_temp = [];
+    eta_temp(kidx) = 1; % place a 1 in the current kernel
+    
+    Hfull{kidx,1}=computeMultiKernelMatrix(Dict,Dict,eta_temp,kfncs);
+    for sidx=1:length(trainClassSmall)
+        Gfull{kidx,sidx}=computeMultiKernelMatrix(Dict,trainSetSmall(:,sidx),eta_temp,kfncs);
+        Bfull{kidx,sidx}=computeMultiKernelMatrix(trainSetSmall(:,sidx),trainSetSmall(:,sidx),eta_temp,kfncs);
     end
-    textprogressbar(' Done.');
+    
+    textprogressbar(kidx*100/length(kfncs));
+end
+textprogressbar(' ');
 % end
 %% Generate eta
 eta = zeros(length(kfncs),1);
@@ -130,46 +137,103 @@ t = 0;
 while(t <= T && err>= err_thresh)
     t = t + 1;
     
-    [X, h, g, z, zm, c] = mklsrcUpdate(Hfull, Gfull, Bfull, eta, trainClassSmall, num_classes, num_per_class);
+    [X, h, g, z, zm, c] = mklsrcUpdate(Hfull, Gfull, Bfull, eta, trainClassSmall, classes, num_per_class);
     
     if sum(z)/length(z) == 1 | sum(c)==0
         err = 0;
-    else    
+    else
         [eta, err] = updateEta(eta, c, mu, z, zm);
     end
     
-    display(['Iteration: ' num2str(t) '/' num2str(T) ' Accuracy: ' num2str(sum(z)/numel(z)) ' Error: ' num2str(err)])
+    display(['TRAINING: Iteration: ' num2str(t) '/' num2str(T) ' Accuracy: ' num2str(sum(z)/numel(z)) ' Error: ' num2str(err)])
 end
-%% Look at the recon errors
-errors = trainSetSmall - Dict*X;
-errornorms = vecnorm(errors);
-%% Test the test set
-textprogressbar('Generating testing matrices: ')
+
+
+%% 'Learn new data'
+% First, evaluate the validation set
+textprogressbar('Generating validation matrices: ')
 for kidx=1:length(kfncs)
     eta_temp = [];
     eta_temp(kidx) = 1; % place a 1 in the current kernel
     
-    Hfulltest{kidx,1}=computeMultiKernelMatrix(Dict,Dict,eta_temp,kfncs);
+    Hfullvalid{kidx,1}=computeMultiKernelMatrix(Dict,Dict,eta_temp,kfncs);
+    for sidx=1:length(validClassSmall)
+        Gfullvalid{kidx,sidx}=computeMultiKernelMatrix(Dict,validSetSmall(:,sidx),eta_temp,kfncs);
+        Bfullvalid{kidx,sidx}=computeMultiKernelMatrix(validSetSmall(:,sidx),validSetSmall(:,sidx),eta_temp,kfncs);
+    end
+    textprogressbar(kidx*100/length(kfncs));
+end
+textprogressbar(' ');
+
+[Xvalid, hvalid, ~, zvalid, ~, ~] = mklsrcUpdate(Hfullvalid, Gfullvalid, Bfullvalid, eta, validClassSmall, classes, num_per_class);
+
+validacc1 = sum(zvalid)/numel(zvalid);
+display(['Validation Accuracy: ' num2str(sum(zvalid)/numel(zvalid))])
+
+
+%% Learn the test set now
+t = 0;textprogressbar('Generating testing matrices: ')
+Hfulltest = Hfull;
+for kidx=1:length(kfncs)
+    eta_temp = [];
+    eta_temp(kidx) = 1; % place a 1 in the current kernel
+   
     for sidx=1:length(testClassSmall)
         Gfulltest{kidx,sidx}=computeMultiKernelMatrix(Dict,testSetSmall(:,sidx),eta_temp,kfncs);
         Bfulltest{kidx,sidx}=computeMultiKernelMatrix(testSetSmall(:,sidx),testSetSmall(:,sidx),eta_temp,kfncs);
     end
     textprogressbar(kidx*100/length(kfncs));
 end
-textprogressbar(' Done.');
+textprogressbar(' ');
 
-[Xtest, htest, ~, ztest, ~, ~] = mklsrcUpdate(Hfulltest, Gfulltest, Bfulltest, eta, testClassSmall, num_classes, num_per_class);
-   
+
+etatest = eta;
+t=0; err = 1;
+while(t <= T && err>= err_thresh)
+    t = t + 1;
+    [Xtest, htest, gtest, ztest, zmtest, ctest] = mklsrcUpdate(Hfulltest, Gfulltest, Bfulltest, etatest, testClassSmall, classes, num_per_class);
+    
+    if sum(z)/length(z) == 1 | sum(c)==0
+        err = 0;
+    else
+        [etatest, err] = updateEta(etatest, ctest, mu, ztest, zmtest);
+    end
+    
+    display(['TESTING: Iteration: ' num2str(t) '/' num2str(T) ' Accuracy: ' num2str(sum(ztest)/numel(ztest)) ' Error: ' num2str(err)])
+end
+
 display(['Testing Accuracy: ' num2str(sum(ztest)/numel(ztest))])
 
-%% Get just the top K largest coeffs in the Xtest for analysis
-Xtestsparse = Xtest;
-% K=3;
-% totalnums = 1:length(Xtestsparse(:,1));
-% for i=1:size(Xtestsparse,2)
-%     [~, maxes]=maxk(Xtestsparse(:,i), K);
-%     Xtestsparse(setdiff(totalnums, maxes),i) = 0;
-% end
-recons = Dict*Xtestsparse;
-recon_errors = testSetSmall - recons;
-errors = vecnorm(recon_errors);
+%% 'Learn new data'
+[Xvalid, hvalid, ~, zvalid, ~, ~] = mklsrcUpdate(Hfullvalid, Gfullvalid, Bfullvalid, etatest, validClassSmall, classes, num_per_class);
+
+validacc2 = sum(zvalid)/numel(zvalid);
+display(['Validation Accuracy: ' num2str(sum(zvalid)/numel(zvalid))])
+%% 'Check OG data again'
+[Xcheck, hcheck, ~, zcheck, ~, ~] = mklsrcUpdate(Hfull, Gfull, Bfull, etatest, trainClassSmall, classes, num_per_class);
+
+validacc2 = sum(zcheck)/numel(zcheck);
+display(['Check Accuracy: ' num2str(sum(zcheck)/numel(zcheck))])
+
+%% Look at the recon errors
+% FIXME - look at only the reconstruction from the class it was classed as
+doanal = 0;
+if doanal
+    for i=1:length(testClassSmall)
+        Xtemp = Xtest(:,i);
+        Xtemp(dictClassSmall ~= htest(i)) = 0;
+        Xtest_classonly(:,i) = Xtemp;
+    end
+    
+    trainrecon_errors = trainSetSmall - Dict*X;
+    trainerrornorms = vecnorm(trainrecon_errors);
+    
+    testrecons = Dict*Xtest_classonly;
+    testrecon_errors = testSetSmall - testrecons;
+    testerrornorms = vecnorm(testrecon_errors);
+    
+    for i=1:length(testClassSmall)
+        immmsestest(i) = immse(testrecons(:,i), testSetSmall(:,i));
+        ssimstest(i) = ssim(reshape(testrecons(:,i),28,28), reshape(testSetSmall(:,i),28,28));
+    end
+end
