@@ -62,7 +62,7 @@ if saveSet
     save('mnist_train_0-8_test_0-9.mat', 'trainSet', 'trainClass', 'testSet', 'testClass', 'trainSetSmall', 'trainClassSmall', 'testSetSmall', 'testClassSmall', 'validSetSmall', 'validClassSmall')
 else
     %     load('mnist_train_0-3_test_0-4.mat');
-        load('mnist_train_0-8_test_0-9.mat');
+        load('renko.mat');
 %     load('caltech_35_train.mat');
 end
 %%
@@ -215,9 +215,9 @@ while(t <= T && err>= err_thresh)
         B=computeMultiKernelMatrixFromPrecomputed(Bfull(:, idx),eta);
         
         % KSRSC sparse coding
-%         [X(:, idx), ~, sparsity(idx)] =KSRSC(H,G,diag(B),optionKSRSC);
-        Xtemp(:,idx) = OMP(H, G, 15, 0);
-        X(:, idx) = Xtemp(:, idx);
+        [X(:, idx), ~, sparsity(idx)] =KSRSC(H,G,diag(B),optionKSRSC);
+%         X(:,idx) = OMP(H, G, 15, 0);
+%         X(:, idx) = Xtemp(:, idx);
 %         sparsity(idx) = (numel(X(:,idx)) - sum(X(:,idx)>0) )/ numel(X(:,idx));
 %         ssims(idx) = ssim(reshape(Dict*X(:,idx), 28, 28), reshape(validSetSmall(:,idx), 28, 28));
         immses(idx) = immse(Dict*X(:,idx), validSetSmall(:,idx));
@@ -233,7 +233,7 @@ while(t <= T && err>= err_thresh)
             classerr(class) = B + x_c'*kernel_c*x_c - 2*partial_c*x_c;
         end
         [~, h(idx)] = min(classerr);
-        h(idx) = h(idx) - 1;  % Adjust for indexing in matlab
+        h(idx) = classes(h(idx));
         z(idx) = (h(idx) == validClassSmall(idx));
         
         % Need to calculate the ability to classify for each individual kernel
@@ -255,7 +255,7 @@ while(t <= T && err>= err_thresh)
                 err_temp(class) = B_temp + x_c'*kernel_c*x_c - 2*partial_c*x_c;
             end
             [~, h_temp] = min(err_temp);
-            h_temp = h_temp - 1;  % Adjust for indexing in matlab
+            h_temp = classes(h_temp);
             g(kidx, idx) = h_temp;
             zm(kidx, idx) = g(kidx, idx) == validClassSmall(idx);
             
@@ -267,6 +267,7 @@ while(t <= T && err>= err_thresh)
         end
         
         textprogressbar(idx*100/size(validSetSmall, 2));
+
     end
     
     textprogressbar(' Done.');
@@ -338,12 +339,12 @@ for idx = 1:size(testSetSmall, 2)
     Btest=computeMultiKernelMatrixFromPrecomputed(Bfulltest(:, idx),eta);
     
     % KSRSC sparse coding
-%     [Xtest(:, idx), ~, sparsitytest(idx)] =KSRSC(Htest,Gtest,diag(Btest),optionKSRSC);
-    Xtemptest(:,idx) = OMP(Htest, Gtest, 15, 0);
-    Xtest(:,idx) = Xtemptest(:,idx);
+    [Xtest(:, idx), ~, sparsitytest(idx)] =KSRSC(Htest,Gtest,diag(Btest),optionKSRSC);
+%     Xtest(:,idx) = OMP(Htest, Gtest, 15, 0);
+%     Xtest(:,idx) = Xtemptest(:,idx);
 %     sparsitytest(idx) = (numel(Xtest(:,idx)) - sum(Xtest(:,idx)>0) )/ numel(Xtest(:,idx));
 %     ssimstest(idx) = ssim(reshape(Dict*Xtemptest(:,idx), 28, 28), reshape(testSetSmall(:,idx), 28, 28));
-    immsestest(idx) = immse(Dict*Xtemptest(:,idx), testSetSmall(:,idx));
+%     immsestest(idx) = immse(Dict*Xtemptest(:,idx), testSetSmall(:,idx));
     
     % Find class - calculate h (class) and z (correct class)
     classerr = zeros(1, num_classes);
@@ -366,7 +367,7 @@ textprogressbar(' Done.');
 display(['Testing Accuracy: ' num2str(sum(ztest)/numel(ztest))])
 
 %% Get just the top K largest coeffs in the Xtest for analysis
-Xtestsparse = Xtemptest;
+Xtestsparse = Xtest;
 % K=3;
 % totalnums = 1:length(Xtestsparse(:,1));
 % for i=1:size(Xtestsparse,2)
