@@ -19,8 +19,8 @@ for idx = 1:length(trainClassSmall)
     B=computeMultiKernelMatrixFromPrecomputed(Bfull(:, idx),eta);
     
     % KSRSC sparse coding
-        [X(:, idx), ~, ~] =KSRSC(H,G,diag(B),optionKSRSC);
-%     X(:,idx) = OMP(H, G, 45, .0001);
+%         [X(:, idx), ~, ~] =KSRSC(H,G,diag(B),optionKSRSC);
+    X(:,idx) = OMP(H, G, 45, .1);
     
     % Find class - calculate h (class) and z (correct class)
     classerr = zeros(1, length(classes));
@@ -72,7 +72,7 @@ for idx = 1:length(trainClassSmall)
     textprogressbar(idx*100/length(trainClassSmall));
 end
 
-thresh = linspace(0,max(max(retrieve_score)),5000);
+thresh = linspace(0,max(max(retrieve_score))+1,50000);
 cc_rate = zeros(length(classes), length(thresh));
 fa_rate = zeros(length(classes), length(thresh));
 for label_idx=1:length(classes)

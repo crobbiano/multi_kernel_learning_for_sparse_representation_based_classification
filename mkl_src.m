@@ -2,7 +2,9 @@ clc
 clear
 addpath(genpath('srv1_9'));
 load('mnist_insitu_save/mnist_insitu_all.mat')
-% load('renko.mat')
+% load('mnist_insitu_save/mnist_insitu_0_7_8_9.mat')
+% load('renko_data/renko.mat')
+% load('gen_scripts/renko.mat')
 %%
 % Save the dictionary
 Dict = dictSetSmall;
@@ -62,6 +64,29 @@ kfncs  = { ...
     @(x,y) exp((-(repmat(sum(x.^2,1)',1,size(y,2))-2*(x'*y)+repmat(sum(y.^2,1),size(x,2),1))/1.7)); ...
     @(x,y) exp((-(repmat(sum(x.^2,1)',1,size(y,2))-2*(x'*y)+repmat(sum(y.^2,1),size(x,2),1))/1.8)); ...
     };
+% p = linspace(.01, 10, 20);
+% kfncs  = { ...
+%     @(x,y) exp((-(repmat(sum(x.^2,1)',1,size(y,2))-2*(x'*y)+repmat(sum(y.^2,1),size(x,2),1))/p(1))); ...  % Gaussian
+%     @(x,y) exp((-(repmat(sum(x.^2,1)',1,size(y,2))-2*(x'*y)+repmat(sum(y.^2,1),size(x,2),1))/p(2))); ...  
+%     @(x,y) exp((-(repmat(sum(x.^2,1)',1,size(y,2))-2*(x'*y)+repmat(sum(y.^2,1),size(x,2),1))/p(3))); ...  
+%     @(x,y) exp((-(repmat(sum(x.^2,1)',1,size(y,2))-2*(x'*y)+repmat(sum(y.^2,1),size(x,2),1))/p(4))); ...  
+%     @(x,y) exp((-(repmat(sum(x.^2,1)',1,size(y,2))-2*(x'*y)+repmat(sum(y.^2,1),size(x,2),1))/p(5))); ...  
+%     @(x,y) exp((-(repmat(sum(x.^2,1)',1,size(y,2))-2*(x'*y)+repmat(sum(y.^2,1),size(x,2),1))/p(6))); ...  
+%     @(x,y) exp((-(repmat(sum(x.^2,1)',1,size(y,2))-2*(x'*y)+repmat(sum(y.^2,1),size(x,2),1))/p(7))); ...  
+%     @(x,y) exp((-(repmat(sum(x.^2,1)',1,size(y,2))-2*(x'*y)+repmat(sum(y.^2,1),size(x,2),1))/p(8))); ...  
+%     @(x,y) exp((-(repmat(sum(x.^2,1)',1,size(y,2))-2*(x'*y)+repmat(sum(y.^2,1),size(x,2),1))/p(9))); ...  
+%     @(x,y) exp((-(repmat(sum(x.^2,1)',1,size(y,2))-2*(x'*y)+repmat(sum(y.^2,1),size(x,2),1))/p(10))); ...  
+%     @(x,y) exp((-(repmat(sum(x.^2,1)',1,size(y,2))-2*(x'*y)+repmat(sum(y.^2,1),size(x,2),1))/p(11))); ... 
+%     @(x,y) exp((-(repmat(sum(x.^2,1)',1,size(y,2))-2*(x'*y)+repmat(sum(y.^2,1),size(x,2),1))/p(12))); ...  
+%     @(x,y) exp((-(repmat(sum(x.^2,1)',1,size(y,2))-2*(x'*y)+repmat(sum(y.^2,1),size(x,2),1))/p(13))); ...  
+%     @(x,y) exp((-(repmat(sum(x.^2,1)',1,size(y,2))-2*(x'*y)+repmat(sum(y.^2,1),size(x,2),1))/p(14))); ...  
+%     @(x,y) exp((-(repmat(sum(x.^2,1)',1,size(y,2))-2*(x'*y)+repmat(sum(y.^2,1),size(x,2),1))/p(15))); ...  
+%     @(x,y) exp((-(repmat(sum(x.^2,1)',1,size(y,2))-2*(x'*y)+repmat(sum(y.^2,1),size(x,2),1))/p(16))); ...  
+%     @(x,y) exp((-(repmat(sum(x.^2,1)',1,size(y,2))-2*(x'*y)+repmat(sum(y.^2,1),size(x,2),1))/p(17))); ...  
+%     @(x,y) exp((-(repmat(sum(x.^2,1)',1,size(y,2))-2*(x'*y)+repmat(sum(y.^2,1),size(x,2),1))/p(18))); ...  
+%     @(x,y) exp((-(repmat(sum(x.^2,1)',1,size(y,2))-2*(x'*y)+repmat(sum(y.^2,1),size(x,2),1))/p(19))); ...  
+%     @(x,y) exp((-(repmat(sum(x.^2,1)',1,size(y,2))-2*(x'*y)+repmat(sum(y.^2,1),size(x,2),1))/p(20))); ...  
+%     };
 %% Compute the M kernel matrices
 textprogressbar('Generating first set of matrices: ')
 % Find K_m(Y, Y) for all M kernel functions
@@ -117,12 +142,12 @@ lambda = .1;
 % max iterations
 T = 10;
 % error thresh for convergence
-err_thresh = .001;
+err_thresh = .01;
 err = err_thresh + 1;
 
 % Make eta
 eta = zeros(length(kfncs),1);
-eta(1)=1;
+eta(end-1)=1;
 
 % Find the number of samples in each class
 classes = unique(dictClassSmall);
@@ -148,36 +173,50 @@ while(t <= T && err>= err_thresh)
     display(['TRAINING: Iteration: ' num2str(t) '/' num2str(T) ' Accuracy: ' num2str(sum(z(t,:))/numel(z(t,:))) ' Error: ' num2str(err)])
 end
 %% Learn the test set now
-t = 0;textprogressbar('TESTING: Generating testing matrices: ')
-Hfulltest = Hfull;
-for kidx=1:length(kfncs)
-    eta_temp = [];
-    eta_temp(kidx) = 1; % place a 1 in the current kernel
-    
-    for sidx=1:length(testClassSmall)
-        Gfulltest{kidx,sidx}=computeMultiKernelMatrix(Dict,testSetSmall(:,sidx),eta_temp,kfncs);
-        Bfulltest{kidx,sidx}=computeMultiKernelMatrix(testSetSmall(:,sidx),testSetSmall(:,sidx),eta_temp,kfncs);
-    end
-    textprogressbar(kidx*100/length(kfncs));
-end
-textprogressbar(' ');
-
+t = 0;
 etatest = eta;
-err = err_thresh + 1;
-t=0; 
-while(t <= T && err>= err_thresh)
-    t = t + 1;
-    [Xtest, htest, gtest, ztest, zmtest, ctest] = mklsrcUpdate(Hfulltest, Gfulltest, Bfulltest, etatest, testClassSmall, classes, num_per_class);
-    [C,CM,IND,PER] = confusion(num2bin10(testClassSmall, max(classes)+1), num2bin10(htest, max(classes)+1));
-    class_percent_correct_test(:,t) = PER(:,3);
+
+totlen = floor(length(testClassSmall)/10);
+for smallidx = 1:10
+    textprogressbar('TESTING: Generating testing matrices: ')
+    testTemp = testSetSmall(:, (smallidx-1)*totlen + 1: (smallidx-1)*totlen + totlen);
+    testTempClass = testClassSmall((smallidx-1)*totlen + 1: (smallidx-1)*totlen + totlen);
+    Hfulltest = Hfull;
+    for kidx=1:length(kfncs)
+        eta_temp = [];
+        eta_temp(kidx) = 1; % place a 1 in the current kernel
+        
+        for sidx=1:size(testTemp, 2)
+            Gfulltest{kidx,sidx}=computeMultiKernelMatrix(Dict,testTemp(:,sidx),eta_temp,kfncs);
+            Bfulltest{kidx,sidx}=computeMultiKernelMatrix(testTemp(:,sidx),testTemp(:,sidx),eta_temp,kfncs);
+        end
+        textprogressbar(kidx*100/length(kfncs));
+    end
+    textprogressbar(' ');
     
-    if sum(ztest)/length(ztest) == 1 | sum(ctest)==0
-        err = 0;
-    else
-        [etatest, err] = updateEta(etatest, ctest, mu, ztest, zmtest);
+    
+    err = err_thresh + 1;
+    t=0;
+    while(t <= T && err>= err_thresh)
+        t = t + 1;
+        [Xtest, htest, gtest, ztest, zmtest, ctest] = mklsrcUpdate(Hfulltest, Gfulltest, Bfulltest, etatest, testTempClass, classes, num_per_class);
+        [C,CM,IND,PER] = confusion(num2bin10(testTempClass, max(classes)+1), num2bin10(htest, max(classes)+1));
+        class_percent_correct_test(:,t) = PER(:,3);
+        
+        % more baseline stuff
+        [X, h, g, z(end+1,:), zm, c] = mklsrcUpdate(Hfull, Gfull, Bfull, etatest, trainClassSmall, classes, num_per_class);
+        [C,CM,IND,PER] = confusion(num2bin10(trainClassSmall, max(classes)+1), num2bin10(h, max(classes)+1));
+        class_percent_correct_train(:,end+1) = PER(:,3);
+        
+        if sum(ztest)/length(ztest) == 1 | sum(ctest)==0
+            err = 0;
+        else
+            [etatest, err] = updateEta(etatest, ctest, mu, ztest, zmtest);
+        end
+        
+        display(['TESTING: Iteration: ' num2str(t) '/' num2str(T) ' Accuracy: ' num2str(sum(ztest)/numel(ztest)) ' Error: ' num2str(err)])
     end
     
-    display(['TESTING: Iteration: ' num2str(t) '/' num2str(T) ' Accuracy: ' num2str(sum(ztest)/numel(ztest)) ' Error: ' num2str(err)])
 end
 % display(['TESTING: Accuracy: ' num2str(sum(ztest)/numel(ztest))])
 %% 'Check OG data again'
@@ -185,3 +224,59 @@ display(['TRAINING: 2nd check'])
 [Xcheck, hcheck, ~, zcheck, ~, ~, cc_rate_fin, fa_rate_fin] = mklsrcUpdate(Hfull, Gfull, Bfull, etatest, trainClassSmall, classes, num_per_class);
 validacc2 = sum(zcheck)/numel(zcheck);
 display(['TRAINING: Accuracy: ' num2str(sum(zcheck)/numel(zcheck))])
+
+%% Make some figures
+% More baseline
+figure(96); clf; hold on
+idx = 1;
+clear cc b bb
+text_vec = 1:2:size(class_percent_correct_train,2);
+for i=1:size(class_percent_correct_train, 1)
+    if sum(class_percent_correct_train(i, :)) > 0
+        color = [mod((3*i/15),1) mod((7*(i+1)/15),1) 1-(i/10)];
+        subplot(2,5,i)
+        b(idx) = plot(class_percent_correct_train(i, :),'--', 'Color', color);
+        text(text_vec, class_percent_correct_train(i, text_vec), num2str(i-1))
+        cc{idx} = [num2str(i-1) ' - Test'];
+        idx = idx + 1;
+        grid minor
+        ylim([.7 1])
+        ylabel([num2str(i-1) ' - Correct Classification Rate'])
+        xlabel('In-Situ Learning Iteration');
+    end
+end
+
+figure(919); clf; hold on
+text_vec = 1:500:size(fa_rate_fin, 2);
+for i=1:size(cc_rate_fin,1)
+    color = [mod((3*i/15),1) mod((6*(i+1)/15),1) 1-(i/10)];
+    bb(i) = plot(fa_rate_fin(i,:), cc_rate_fin(i,:),'--', 'Color', color);
+%     text(results.fa_rate_nonan(i, text_vec), results.cc_rate_nonan(i, text_vec), num2str(i-1));
+    cc{i} = [num2str(i-1) ''];
+end
+ylim([.75 1]);
+grid on;
+legend(bb,cc)
+ylabel('Probability of correct classification')
+xlabel('Probability of false alarm')
+
+
+fa_rate_fin_avg = nanmean(fa_rate_fin);
+cc_rate_fin_avg = nanmean(cc_rate_fin);
+fa_rate_ini_avg = nanmean(fa_rate_ini);
+cc_rate_ini_avg = nanmean(cc_rate_ini);
+figure(906); clf
+plot(fa_rate_ini_avg,cc_rate_ini_avg,'LineWidth',2);
+hold on;
+plot(fa_rate_fin_avg,cc_rate_fin_avg,'r','LineWidth',2)
+xlabel('P_{FA}')
+ylabel('P_{CC}')
+legend('After Baseline Training','After In-Situ Learning')
+grid on
+
+figure(48); clf; hold on
+plot( mean(z,2), '--');
+% plot( mean(ztest,2)); 
+legend('Baseline')
+% xlim([1 length(results.AUC_gen)])
+xlabel('In-Situ Learning Iteration'); ylabel('Correct Classification Rate')

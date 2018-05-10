@@ -2,7 +2,7 @@ clear all
 clc
 close all
 %%
-load('renko_min_th2_len20.mat')
+load('renko_l2norm_min_th2_len5.mat')
 allClass = label;
 allClass(allClass==-1) = 0;
 allSet = feature';
@@ -65,7 +65,7 @@ validClassSmall=allClass(indValidSmall);
 
 %% Get only certain digits
 someDigits = 0;
-classes = [0 2 3 8]
+classes = [0 2 3 8];
 if someDigits
     dictIdx       = logical(sum(dictClass'       == classes, 2));
     dictIdxSmall  = logical(sum(dictClassSmall'  == classes, 2));
